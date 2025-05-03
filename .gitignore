@@ -1,0 +1,16 @@
+# Các file hệ thống
+.DS_Store
+Thumbs.db
+
+# Các thư mục và file của IDE/Editor
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Các file log
+*.log
+
+# Các file tạm thời
+*.tmp
+*.bak

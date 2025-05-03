@@ -1,0 +1,29 @@
+/* Custom styles to complement Bootstrap */
+
+body {
+    background-color: #f8f9fa;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.table th {
+    font-weight: 600;
+}
+
+/* Format currency values */
+.currency {
+    font-family: monospace;
+    text-align: right;
+}
+
+/* Animation for new items */
+@keyframes highlight {
+    from { background-color: #fff3cd; }
+    to { background-color: transparent; }
+}
+
+.highlight-row {
+    animation: highlight 2s ease-out;
+}
