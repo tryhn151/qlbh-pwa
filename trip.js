@@ -98,8 +98,6 @@ async function showTripDetail(tripId) {
         const tx = db.transaction(['trips', 'purchases', 'orders', 'customers'], 'readonly');
         const tripStore = tx.objectStore('trips');
         const purchaseStore = tx.objectStore('purchases');
-        const orderStore = tx.objectStore('orders');
-        const customerStore = tx.objectStore('customers');
         
         const trip = await tripStore.get(tripId);
         if (!trip) {
@@ -111,25 +109,10 @@ async function showTripDetail(tripId) {
         const purchaseIndex = purchaseStore.index('tripId');
         const purchases = await purchaseIndex.getAll(tripId);
         
-        // Lấy danh sách đơn hàng đã giao trong chuyến
-        const orders = await orderStore.getAll();
-        const deliveredOrders = orders.filter(order => order.deliveredTripId === tripId);
-        
         // Tính tổng chi phí nhập hàng
         const totalCost = purchases.reduce((sum, purchase) => sum + (purchase.qty * purchase.purchasePrice), 0);
         
-        // Tính tổng doanh thu từ các đơn hàng đã giao
-        let totalRevenue = 0;
-        for (const order of deliveredOrders) {
-            if (order.items && order.items.length > 0) {
-                totalRevenue += order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
-            }
-        }
-        
-        // Tính lợi nhuận gộp
-        const grossProfit = totalRevenue - totalCost;
-        
-        // Tạo nội dung chi tiết chuyến hàng
+        // Tạo nội dung chi tiết chuyến hàng - phần thông tin cơ bản
         const tripDetailContent = document.getElementById('trip-detail-content');
         if (!tripDetailContent) return;
         
@@ -154,15 +137,15 @@ async function showTripDetail(tripId) {
                     <div class="card bg-light">
                         <div class="card-body text-center">
                             <h6 class="card-title">Tổng doanh thu bán</h6>
-                            <p class="card-text fs-4 text-primary">${formatCurrency(totalRevenue)}</p>
+                            <p class="card-text fs-4 text-primary">0 VNĐ</p>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="card ${grossProfit >= 0 ? 'bg-success' : 'bg-danger'} text-white">
+                    <div class="card bg-danger text-white">
                         <div class="card-body text-center">
                             <h6 class="card-title">Lợi nhuận gộp</h6>
-                            <p class="card-text fs-4">${formatCurrency(grossProfit)}</p>
+                            <p class="card-text fs-4">0 VNĐ</p>
                         </div>
                     </div>
                 </div>
@@ -231,56 +214,7 @@ async function showTripDetail(tripId) {
                 
                 <!-- Tab Đơn hàng đã giao -->
                 <div class="tab-pane fade" id="delivered-orders-tab-pane" role="tabpanel" aria-labelledby="delivered-orders-tab" tabindex="0">
-                    ${deliveredOrders.length > 0 ? `
-                        <div class="table-responsive">
-                            <table class="table table-sm table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Khách hàng</th>
-                                        <th>Ngày đặt</th>
-                                        <th>Tổng tiền</th>
-                                        <th>Thao tác</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${await Promise.all(deliveredOrders.map(async order => {
-                                        const customer = await customerStore.get(order.customerId);
-                                        const customerName = customer ? customer.name : 'Không xác định';
-                                        
-                                        let orderTotal = 0;
-                                        if (order.items && order.items.length > 0) {
-                                            orderTotal = order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
-                                        }
-                                        
-                                        return `
-                                            <tr>
-                                                <td>${order.id}</td>
-                                                <td>${customerName}</td>
-                                                <td>${formatDate(order.orderDate)}</td>
-                                                <td class="text-end">${formatCurrency(orderTotal)}</td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-info view-order-btn" data-id="${order.id}">
-                                                        Chi tiết
-                                                    </button>
-                                                    <button class="btn btn-sm btn-warning unlink-order-btn" data-id="${order.id}" data-trip-id="${tripId}">
-                                                        Hủy liên kết
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        `;
-                                    }))}
-                                </tbody>
-                                <tfoot>
-                                    <tr>
-                                        <th colspan="3" class="text-end">Tổng doanh thu:</th>
-                                        <th class="text-end">${formatCurrency(totalRevenue)}</th>
-                                        <th></th>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    ` : '<div class="alert alert-info">Chưa có đơn hàng nào được giao trong chuyến này.</div>'}
+                    <div class="alert alert-info">Đang tải dữ liệu đơn hàng...</div>
                 </div>
                 
                 <!-- Tab Thêm chi phí -->
@@ -313,69 +247,7 @@ async function showTripDetail(tripId) {
                 
                 <!-- Tab Liên kết đơn hàng -->
                 <div class="tab-pane fade" id="link-orders-tab-pane" role="tabpanel" aria-labelledby="link-orders-tab" tabindex="0">
-                    <form id="link-orders-form" data-trip-id="${tripId}">
-                        <div class="mb-3">
-                            <label class="form-label">Chọn đơn hàng cần liên kết</label>
-                            <div class="alert alert-info">
-                                Chỉ hiển thị các đơn hàng có trạng thái "Mới" hoặc "Đang xử lý" và chưa được liên kết với chuyến hàng nào.
-                            </div>
-                            
-                            ${await (async () => {
-                                const pendingOrders = orders.filter(order => 
-                                    (order.status === 'Mới' || order.status === 'Đang xử lý') && 
-                                    !order.deliveredTripId
-                                );
-                                
-                                if (pendingOrders.length === 0) {
-                                    return '<div class="alert alert-warning">Không có đơn hàng nào đang chờ giao.</div>';
-                                }
-                                
-                                let html = '<div class="table-responsive"><table class="table table-sm table-striped">';
-                                html += `
-                                    <thead>
-                                        <tr>
-                                            <th>Chọn</th>
-                                            <th>ID</th>
-                                            <th>Khách hàng</th>
-                                            <th>Ngày đặt</th>
-                                            <th>Trạng thái</th>
-                                            <th>Tổng tiền</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                `;
-                                
-                                for (const order of pendingOrders) {
-                                    const customer = await customerStore.get(order.customerId);
-                                    const customerName = customer ? customer.name : 'Không xác định';
-                                    
-                                    let orderTotal = 0;
-                                    if (order.items && order.items.length > 0) {
-                                        orderTotal = order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
-                                    }
-                                    
-                                    html += `
-                                        <tr>
-                                            <td>
-                                                <div class="form-check">
-                                                    <input class="form-check-input order-checkbox" type="checkbox" value="${order.id}" id="order-${order.id}">
-                                                </div>
-                                            </td>
-                                            <td>${order.id}</td>
-                                            <td>${customerName}</td>
-                                            <td>${formatDate(order.orderDate)}</td>
-                                            <td><span class="badge ${getStatusBadgeClass(order.status)}">${order.status}</span></td>
-                                            <td class="text-end">${formatCurrency(orderTotal)}</td>
-                                        </tr>
-                                    `;
-                                }
-                                
-                                html += '</tbody></table></div>';
-                                return html;
-                            })()}
-                        </div>
-                        <button type="submit" class="btn btn-primary">Xác nhận giao hàng & Liên kết với chuyến</button>
-                    </form>
+                    <div class="alert alert-info">Đang tải dữ liệu đơn hàng...</div>
                 </div>
             </div>
         `;
@@ -401,42 +273,8 @@ async function showTripDetail(tripId) {
                         paymentStatus
                     };
                     
+                    // Thêm chi phí và cập nhật modal
                     await addPurchase(purchaseData);
-                    
-                    // Đóng modal và mở lại để cập nhật dữ liệu
-                    const tripDetailModal = bootstrap.Modal.getInstance(document.getElementById('tripDetailModal'));
-                    tripDetailModal.hide();
-                    
-                    // Hiển thị lại chi tiết chuyến hàng
-                    setTimeout(() => {
-                        showTripDetail(tripId);
-                    }, 500);
-                }
-            });
-        }
-        
-        // Thêm sự kiện cho form liên kết đơn hàng
-        const linkOrdersForm = document.getElementById('link-orders-form');
-        if (linkOrdersForm) {
-            linkOrdersForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const tripId = parseInt(linkOrdersForm.getAttribute('data-trip-id'));
-                const selectedOrderIds = Array.from(document.querySelectorAll('.order-checkbox:checked')).map(checkbox => parseInt(checkbox.value));
-                
-                if (selectedOrderIds.length > 0) {
-                    await linkOrdersToTrip(tripId, selectedOrderIds);
-                    
-                    // Đóng modal và mở lại để cập nhật dữ liệu
-                    const tripDetailModal = bootstrap.Modal.getInstance(document.getElementById('tripDetailModal'));
-                    tripDetailModal.hide();
-                    
-                    // Hiển thị lại chi tiết chuyến hàng
-                    setTimeout(() => {
-                        showTripDetail(tripId);
-                    }, 500);
-                } else {
-                    alert('Vui lòng chọn ít nhất một đơn hàng để liên kết.');
                 }
             });
         }
@@ -447,36 +285,8 @@ async function showTripDetail(tripId) {
                 const purchaseId = parseInt(e.target.getAttribute('data-id'));
                 if (confirm('Bạn có chắc muốn xóa chi phí nhập hàng này?')) {
                     await deletePurchase(purchaseId);
-                    
-                    // Đóng modal và mở lại để cập nhật dữ liệu
-                    const tripDetailModal = bootstrap.Modal.getInstance(document.getElementById('tripDetailModal'));
-                    tripDetailModal.hide();
-                    
-                    // Hiển thị lại chi tiết chuyến hàng
-                    setTimeout(() => {
-                        showTripDetail(tripId);
-                    }, 500);
-                }
-            });
-        });
-        
-        // Thêm sự kiện cho các nút hủy liên kết đơn hàng
-        document.querySelectorAll('.unlink-order-btn').forEach(button => {
-            button.addEventListener('click', async (e) => {
-                const orderId = parseInt(e.target.getAttribute('data-id'));
-                const tripId = parseInt(e.target.getAttribute('data-trip-id'));
-                
-                if (confirm('Bạn có chắc muốn hủy liên kết đơn hàng này khỏi chuyến hàng?')) {
-                    await unlinkOrderFromTrip(orderId);
-                    
-                    // Đóng modal và mở lại để cập nhật dữ liệu
-                    const tripDetailModal = bootstrap.Modal.getInstance(document.getElementById('tripDetailModal'));
-                    tripDetailModal.hide();
-                    
-                    // Hiển thị lại chi tiết chuyến hàng
-                    setTimeout(() => {
-                        showTripDetail(tripId);
-                    }, 500);
+                    // Cập nhật lại chi tiết chuyến hàng sau khi xóa
+                    await updateTripDetailOrders(tripId);
                 }
             });
         });
@@ -484,6 +294,9 @@ async function showTripDetail(tripId) {
         // Hiển thị modal
         const tripDetailModal = new bootstrap.Modal(document.getElementById('tripDetailModal'));
         tripDetailModal.show();
+        
+        // Cập nhật thông tin đơn hàng trong modal
+        await updateTripDetailOrders(tripId);
         
     } catch (error) {
         console.error('Lỗi khi hiển thị chi tiết chuyến hàng:', error);
@@ -500,6 +313,100 @@ async function addPurchase(purchaseData) {
         await tx.done;
         
         console.log('Đã thêm chi phí nhập hàng mới với ID:', id);
+        
+        // Lấy dữ liệu chi phí nhập hàng mới
+        const tripId = purchaseData.tripId;
+        
+        // Lấy danh sách chi phí nhập hàng hiện tại
+        const purchaseTx = db.transaction('purchases', 'readonly');
+        const purchaseStore = purchaseTx.objectStore('purchases');
+        const purchaseIndex = purchaseStore.index('tripId');
+        const purchases = await purchaseIndex.getAll(tripId);
+        
+        // Tính tổng chi phí mới
+        const totalCost = purchases.reduce((sum, purchase) => sum + (purchase.qty * purchase.purchasePrice), 0);
+        
+        // Lấy element chứa bảng chi phí để cập nhật
+        const purchasesTabPane = document.getElementById('purchases-tab-pane');
+        if (purchasesTabPane) {
+            // Tạo HTML cho bảng chi phí mới
+            let purchasesHTML = `
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tên sản phẩm</th>
+                                <th>Số lượng</th>
+                                <th>Giá nhập</th>
+                                <th>Thành tiền</th>
+                                <th>Trạng thái thanh toán</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${purchases.map(purchase => `
+                                <tr>
+                                    <td>${purchase.id}</td>
+                                    <td>${purchase.productName}</td>
+                                    <td class="text-center">${purchase.qty}</td>
+                                    <td class="text-end">${formatCurrency(purchase.purchasePrice)}</td>
+                                    <td class="text-end">${formatCurrency(purchase.qty * purchase.purchasePrice)}</td>
+                                    <td><span class="badge ${purchase.paymentStatus === 'Đã trả' ? 'bg-success' : 'bg-warning'}">${purchase.paymentStatus}</span></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-danger delete-purchase-btn" data-id="${purchase.id}">
+                                            Xóa
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="4" class="text-end">Tổng cộng:</th>
+                                <th class="text-end">${formatCurrency(totalCost)}</th>
+                                <th colspan="2"></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            `;
+            
+            // Cập nhật nội dung tab chi phí
+            purchasesTabPane.innerHTML = purchasesHTML;
+            
+            // Cập nhật tổng chi phí nhập trong card thông tin
+            const costCardElement = document.querySelector('.card-text.fs-4.text-danger');
+            if (costCardElement) {
+                costCardElement.textContent = formatCurrency(totalCost);
+            }
+            
+            // Thêm lại sự kiện cho các nút xóa chi phí
+            document.querySelectorAll('.delete-purchase-btn').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const purchaseId = parseInt(e.target.getAttribute('data-id'));
+                    if (confirm('Bạn có chắc muốn xóa chi phí nhập hàng này?')) {
+                        await deletePurchase(purchaseId);
+                        
+                        // Cập nhật lại chi tiết chuyến hàng sau khi xóa
+                        await showTripDetail(tripId);
+                    }
+                });
+            });
+        }
+        
+        // Reset form nhập chi phí
+        const addPurchaseForm = document.getElementById('add-purchase-form');
+        if (addPurchaseForm) {
+            addPurchaseForm.reset();
+            document.getElementById('purchase-product-name').focus();
+        }
+        
+        // Chuyển tab về tab chi phí nhập hàng để người dùng thấy kết quả
+        const purchasesTab = document.getElementById('purchases-tab');
+        if (purchasesTab) {
+            purchasesTab.click();
+        }
         
         // Cập nhật báo cáo
         await displayReports();
@@ -551,7 +458,10 @@ async function linkOrdersToTrip(tripId, orderIds) {
         
         console.log(`Đã liên kết ${orderIds.length} đơn hàng với chuyến hàng ID: ${tripId}`);
         
-        // Cập nhật giao diện
+        // Cập nhật trực tiếp giao diện modal chi tiết chuyến hàng
+        await updateTripDetailOrders(tripId);
+        
+        // Cập nhật giao diện danh sách đơn hàng chung
         await displayOrders();
         await displayReports();
         
@@ -559,6 +469,239 @@ async function linkOrdersToTrip(tripId, orderIds) {
     } catch (error) {
         console.error('Lỗi khi liên kết đơn hàng với chuyến hàng:', error);
         return false;
+    }
+}
+
+// Hàm mới để cập nhật phần đơn hàng trong modal chi tiết chuyến
+async function updateTripDetailOrders(tripId) {
+    try {
+        // Lấy thông tin chuyến hàng và đơn hàng
+        const tx = db.transaction(['orders', 'customers'], 'readonly');
+        const orderStore = tx.objectStore('orders');
+        const customerStore = tx.objectStore('customers');
+        
+        const orders = await orderStore.getAll();
+        
+        // Lấy danh sách đơn hàng đã giao trong chuyến
+        const deliveredOrders = orders.filter(order => order.deliveredTripId === tripId);
+        
+        // Lấy danh sách đơn hàng chưa liên kết
+        const pendingOrders = orders.filter(order => 
+            (order.status === 'Mới' || order.status === 'Đang xử lý') && 
+            !order.deliveredTripId
+        );
+        
+        // Tính tổng doanh thu từ các đơn hàng đã giao
+        let totalRevenue = 0;
+        for (const order of deliveredOrders) {
+            if (order.items && order.items.length > 0) {
+                totalRevenue += order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
+            }
+        }
+        
+        // Cập nhật tab đơn hàng đã giao
+        const deliveredOrdersTabPane = document.getElementById('delivered-orders-tab-pane');
+        if (deliveredOrdersTabPane) {
+            if (deliveredOrders.length > 0) {
+                let html = `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Khách hàng</th>
+                                    <th>Ngày đặt</th>
+                                    <th>Tổng tiền</th>
+                                    <th>Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                for (const order of deliveredOrders) {
+                    const customer = await customerStore.get(order.customerId);
+                    const customerName = customer ? customer.name : 'Không xác định';
+                    
+                    let orderTotal = 0;
+                    if (order.items && order.items.length > 0) {
+                        orderTotal = order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
+                    }
+                    
+                    html += `
+                        <tr>
+                            <td>${order.id}</td>
+                            <td>${customerName}</td>
+                            <td>${formatDate(order.orderDate)}</td>
+                            <td class="text-end">${formatCurrency(orderTotal)}</td>
+                            <td>
+                                <button class="btn btn-sm btn-info view-order-btn" data-id="${order.id}">
+                                    Chi tiết
+                                </button>
+                                <button class="btn btn-sm btn-warning unlink-order-btn" data-id="${order.id}" data-trip-id="${tripId}">
+                                    Hủy liên kết
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }
+                
+                html += `
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="3" class="text-end">Tổng doanh thu:</th>
+                                    <th class="text-end">${formatCurrency(totalRevenue)}</th>
+                                    <th></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                `;
+                
+                deliveredOrdersTabPane.innerHTML = html;
+                
+                // Thêm lại sự kiện cho các nút
+                document.querySelectorAll('.view-order-btn').forEach(button => {
+                    button.addEventListener('click', async (e) => {
+                        const orderId = parseInt(e.target.getAttribute('data-id'));
+                        await showOrderDetail(orderId);
+                    });
+                });
+                
+                document.querySelectorAll('.unlink-order-btn').forEach(button => {
+                    button.addEventListener('click', async (e) => {
+                        const orderId = parseInt(e.target.getAttribute('data-id'));
+                        const tripId = parseInt(e.target.getAttribute('data-trip-id'));
+                        
+                        if (confirm('Bạn có chắc muốn hủy liên kết đơn hàng này khỏi chuyến hàng?')) {
+                            await unlinkOrderFromTrip(orderId);
+                            // Sau khi hủy liên kết, cập nhật lại giao diện
+                            await updateTripDetailOrders(tripId);
+                        }
+                    });
+                });
+            } else {
+                deliveredOrdersTabPane.innerHTML = '<div class="alert alert-info">Chưa có đơn hàng nào được giao trong chuyến này.</div>';
+            }
+        }
+        
+        // Cập nhật tab liên kết đơn hàng
+        const linkOrdersTabPane = document.getElementById('link-orders-tab-pane');
+        if (linkOrdersTabPane) {
+            let html = `
+                <form id="link-orders-form" data-trip-id="${tripId}">
+                    <div class="mb-3">
+                        <label class="form-label">Chọn đơn hàng cần liên kết</label>
+                        <div class="alert alert-info">
+                            Chỉ hiển thị các đơn hàng có trạng thái "Mới" hoặc "Đang xử lý" và chưa được liên kết với chuyến hàng nào.
+                        </div>
+            `;
+            
+            if (pendingOrders.length === 0) {
+                html += '<div class="alert alert-warning">Không có đơn hàng nào đang chờ giao.</div>';
+            } else {
+                html += `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Chọn</th>
+                                    <th>ID</th>
+                                    <th>Khách hàng</th>
+                                    <th>Ngày đặt</th>
+                                    <th>Trạng thái</th>
+                                    <th>Tổng tiền</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                for (const order of pendingOrders) {
+                    const customer = await customerStore.get(order.customerId);
+                    const customerName = customer ? customer.name : 'Không xác định';
+                    
+                    let orderTotal = 0;
+                    if (order.items && order.items.length > 0) {
+                        orderTotal = order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
+                    }
+                    
+                    html += `
+                        <tr>
+                            <td>
+                                <div class="form-check">
+                                    <input class="form-check-input order-checkbox" type="checkbox" value="${order.id}" id="order-${order.id}">
+                                </div>
+                            </td>
+                            <td>${order.id}</td>
+                            <td>${customerName}</td>
+                            <td>${formatDate(order.orderDate)}</td>
+                            <td><span class="badge ${getStatusBadgeClass(order.status)}">${order.status}</span></td>
+                            <td class="text-end">${formatCurrency(orderTotal)}</td>
+                        </tr>
+                    `;
+                }
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+            
+            html += `
+                    </div>
+                    <button type="submit" class="btn btn-primary">Xác nhận giao hàng & Liên kết với chuyến</button>
+                </form>
+            `;
+            
+            linkOrdersTabPane.innerHTML = html;
+            
+            // Thêm lại sự kiện cho form liên kết đơn hàng
+            const linkOrdersForm = document.getElementById('link-orders-form');
+            if (linkOrdersForm) {
+                linkOrdersForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    
+                    const tripId = parseInt(linkOrdersForm.getAttribute('data-trip-id'));
+                    const selectedOrderIds = Array.from(document.querySelectorAll('.order-checkbox:checked')).map(checkbox => parseInt(checkbox.value));
+                    
+                    if (selectedOrderIds.length > 0) {
+                        await linkOrdersToTrip(tripId, selectedOrderIds);
+                    } else {
+                        alert('Vui lòng chọn ít nhất một đơn hàng để liên kết.');
+                    }
+                });
+            }
+        }
+        
+        // Cập nhật doanh thu trong card thông tin
+        const revenueCardElement = document.querySelector('.card-text.fs-4.text-primary');
+        if (revenueCardElement) {
+            revenueCardElement.textContent = formatCurrency(totalRevenue);
+        }
+        
+        // Cập nhật lợi nhuận trong card thông tin
+        const grossProfitCardElement = document.querySelector('.card-text.fs-4:not(.text-danger):not(.text-primary)');
+        if (grossProfitCardElement) {
+            // Lấy tổng chi phí nhập hàng
+            const costCardElement = document.querySelector('.card-text.fs-4.text-danger');
+            if (costCardElement) {
+                const totalCostText = costCardElement.textContent;
+                const totalCost = parseFloat(totalCostText.replace(/[^\d.-]/g, '')) || 0;
+                const grossProfit = totalRevenue - totalCost;
+                
+                // Cập nhật giá trị và màu nền
+                grossProfitCardElement.textContent = formatCurrency(grossProfit);
+                const grossProfitCard = grossProfitCardElement.closest('.card');
+                if (grossProfitCard) {
+                    grossProfitCard.className = grossProfit >= 0 ? 
+                        'card bg-success text-white' : 'card bg-danger text-white';
+                }
+            }
+        }
+        
+    } catch (error) {
+        console.error('Lỗi khi cập nhật thông tin đơn hàng trong chi tiết chuyến:', error);
     }
 }
 
@@ -570,20 +713,28 @@ async function unlinkOrderFromTrip(orderId) {
         
         const order = await store.get(orderId);
         if (order) {
+            // Lưu tripId trước khi xóa liên kết
+            const tripId = order.deliveredTripId;
+            
+            // Cập nhật order
             order.status = 'Đang xử lý';
             order.deliveredTripId = null;
             await store.put(order);
+            
+            await tx.done;
+            
+            console.log(`Đã hủy liên kết đơn hàng ID: ${orderId} khỏi chuyến hàng`);
+            
+            // Cập nhật trực tiếp giao diện modal chi tiết chuyến hàng
+            await updateTripDetailOrders(tripId);
+            
+            // Cập nhật giao diện danh sách đơn hàng chung
+            await displayOrders();
+            await displayReports();
+            
+            return true;
         }
-        
-        await tx.done;
-        
-        console.log(`Đã hủy liên kết đơn hàng ID: ${orderId} khỏi chuyến hàng`);
-        
-        // Cập nhật giao diện
-        await displayOrders();
-        await displayReports();
-        
-        return true;
+        return false;
     } catch (error) {
         console.error('Lỗi khi hủy liên kết đơn hàng khỏi chuyến hàng:', error);
         return false;
