@@ -25,14 +25,25 @@ async function initApp() {
 // Tải dữ liệu ban đầu
 async function loadInitialData() {
     try {
-        // Hiển thị danh sách bán hàng (tab cũ)
-        await displaySales();
-
         // Tải module khách hàng nếu hàm có sẵn
         if (typeof window.loadCustomerModule === 'function') {
             await window.loadCustomerModule();
         } else {
             console.warn('Module khách hàng chưa sẵn sàng - sẽ được khởi tạo sau');
+        }
+
+        // Tải module nhà cung cấp nếu hàm có sẵn
+        if (typeof window.loadSupplierModule === 'function') {
+            await window.loadSupplierModule();
+        } else {
+            console.warn('Module nhà cung cấp chưa sẵn sàng - sẽ được khởi tạo sau');
+        }
+
+        // Tải module sản phẩm nếu hàm có sẵn
+        if (typeof window.loadProductModule === 'function') {
+            await window.loadProductModule();
+        } else {
+            console.warn('Module sản phẩm chưa sẵn sàng - sẽ được khởi tạo sau');
         }
 
         // Hiển thị danh sách đơn hàng
@@ -44,8 +55,20 @@ async function loadInitialData() {
         // Hiển thị danh sách thanh toán
         await displayPayments();
 
+        // Tải module công nợ nếu hàm có sẵn
+        if (typeof window.loadDebtModule === 'function') {
+            await window.loadDebtModule();
+        } else {
+            console.warn('Module công nợ chưa sẵn sàng - sẽ được khởi tạo sau');
+        }
+
         // Hiển thị báo cáo
         await displayReports();
+
+        // Thiết lập các event listener cho báo cáo
+        if (typeof setupReportEventListeners === 'function') {
+            setupReportEventListeners();
+        }
     } catch (error) {
         console.error('Lỗi khi tải dữ liệu ban đầu:', error);
     }
@@ -85,11 +108,11 @@ window.db = null; // Khai báo biến toàn cục để các file khác có th�
 async function initDB() {
     try {
         console.log('Đang khởi tạo IndexedDB...');
-        
+
         // Kiểm tra xem idb có sẵn không
         if (typeof idb === 'undefined') {
             console.error('Thư viện idb không được tải. Đang thử lại sau 1 giây...');
-            
+
             // Thử lại sau 1 giây
             return new Promise(resolve => {
                 setTimeout(async () => {
@@ -105,68 +128,143 @@ async function initDB() {
         }
 
         console.log('Thư viện idb đã được tải, tiếp tục khởi tạo database...');
-        window.db = await idb.openDB('salesAppDB', 1, {
-            upgrade(db) {
-                console.log('Đang nâng cấp database...');
-                
-                // 1. Tạo object store customers
-                if (!db.objectStoreNames.contains('customers')) {
-                    console.log('Tạo object store customers');
-                    const customersStore = db.createObjectStore('customers', {
-                        keyPath: 'id',
-                        autoIncrement: true
-                    });
-                    // Các trường: name, contact
+        window.db = await idb.openDB('salesAppDB', 3, {
+            upgrade(db, oldVersion, newVersion) {
+                console.log(`Đang nâng cấp database từ phiên bản ${oldVersion} lên ${newVersion}...`);
+
+                // Nâng cấp từ phiên bản cũ hoặc tạo mới
+                if (oldVersion < 1) {
+                    // 1. Tạo object store customers
+                    if (!db.objectStoreNames.contains('customers')) {
+                        console.log('Tạo object store customers');
+                        const customersStore = db.createObjectStore('customers', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        // Các trường: name, contact
+                    }
+
+                    // 2. Tạo object store orders
+                    if (!db.objectStoreNames.contains('orders')) {
+                        console.log('Tạo object store orders');
+                        const ordersStore = db.createObjectStore('orders', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        ordersStore.createIndex('customerId', 'customerId');
+                    }
+
+                    // 3. Tạo object store trips
+                    if (!db.objectStoreNames.contains('trips')) {
+                        console.log('Tạo object store trips');
+                        const tripsStore = db.createObjectStore('trips', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                    }
+
+                    // 4. Tạo object store purchases
+                    if (!db.objectStoreNames.contains('purchases')) {
+                        console.log('Tạo object store purchases');
+                        const purchasesStore = db.createObjectStore('purchases', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        purchasesStore.createIndex('tripId', 'tripId');
+                    }
+
+                    // 5. Tạo object store customerPayments
+                    if (!db.objectStoreNames.contains('customerPayments')) {
+                        console.log('Tạo object store customerPayments');
+                        const customerPaymentsStore = db.createObjectStore('customerPayments', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        customerPaymentsStore.createIndex('customerId', 'customerId');
+                    }
+
+                    // Kiểm tra object store sales
+                    if (!db.objectStoreNames.contains('sales')) {
+                        console.log('Tạo object store sales');
+                        const salesStore = db.createObjectStore('sales', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        salesStore.createIndex('date', 'date');
+                        salesStore.createIndex('productName', 'productName');
+                    }
                 }
 
-                // 2. Tạo object store orders
-                if (!db.objectStoreNames.contains('orders')) {
-                    console.log('Tạo object store orders');
-                    const ordersStore = db.createObjectStore('orders', {
-                        keyPath: 'id',
-                        autoIncrement: true
-                    });
-                    ordersStore.createIndex('customerId', 'customerId');
+                // Nâng cấp lên phiên bản 2 - Thêm các object store mới
+                if (oldVersion < 2) {
+                    // 1. Tạo object store suppliers (nhà cung cấp)
+                    if (!db.objectStoreNames.contains('suppliers')) {
+                        console.log('Tạo object store suppliers');
+                        const suppliersStore = db.createObjectStore('suppliers', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        // Các trường: name, address, contact, region
+                    }
+
+                    // 2. Tạo object store products (sản phẩm)
+                    if (!db.objectStoreNames.contains('products')) {
+                        console.log('Tạo object store products');
+                        const productsStore = db.createObjectStore('products', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        productsStore.createIndex('supplierId', 'supplierId');
+                        // Các trường: name, code, unit, purchasePrice, supplierId
+                    }
+
+                    // 3. Tạo object store customerPrices (giá bán theo khách hàng)
+                    if (!db.objectStoreNames.contains('customerPrices')) {
+                        console.log('Tạo object store customerPrices');
+                        const customerPricesStore = db.createObjectStore('customerPrices', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        customerPricesStore.createIndex('customerId', 'customerId');
+                        customerPricesStore.createIndex('productId', 'productId');
+                        customerPricesStore.createIndex('customerProduct', ['customerId', 'productId']);
+                        // Các trường: customerId, productId, price, lastUpdated
+                    }
+
+                    // 4. Tạo object store tripExpenses (chi phí phát sinh của chuyến hàng)
+                    if (!db.objectStoreNames.contains('tripExpenses')) {
+                        console.log('Tạo object store tripExpenses');
+                        const tripExpensesStore = db.createObjectStore('tripExpenses', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        tripExpensesStore.createIndex('tripId', 'tripId');
+                        tripExpensesStore.createIndex('category', 'category');
+                        // Các trường: tripId, description, amount, date, category
+                    }
+
+                    // 5. Tạo object store orderItems (chi tiết đơn hàng)
+                    if (!db.objectStoreNames.contains('orderItems')) {
+                        console.log('Tạo object store orderItems');
+                        const orderItemsStore = db.createObjectStore('orderItems', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        orderItemsStore.createIndex('orderId', 'orderId');
+                        orderItemsStore.createIndex('productId', 'productId');
+                        // Các trường: orderId, productId, qty, sellingPrice
+                    }
                 }
 
-                // 3. Tạo object store trips
-                if (!db.objectStoreNames.contains('trips')) {
-                    console.log('Tạo object store trips');
-                    const tripsStore = db.createObjectStore('trips', {
-                        keyPath: 'id',
-                        autoIncrement: true
-                    });
-                }
-
-                // 4. Tạo object store purchases
-                if (!db.objectStoreNames.contains('purchases')) {
-                    console.log('Tạo object store purchases');
-                    const purchasesStore = db.createObjectStore('purchases', {
-                        keyPath: 'id',
-                        autoIncrement: true
-                    });
-                    purchasesStore.createIndex('tripId', 'tripId');
-                }
-
-                // 5. Tạo object store customerPayments
-                if (!db.objectStoreNames.contains('customerPayments')) {
-                    console.log('Tạo object store customerPayments');
-                    const customerPaymentsStore = db.createObjectStore('customerPayments', {
-                        keyPath: 'id',
-                        autoIncrement: true
-                    });
-                    customerPaymentsStore.createIndex('customerId', 'customerId');
-                }
-
-                // Kiểm tra object store sales
-                if (!db.objectStoreNames.contains('sales')) {
-                    console.log('Tạo object store sales');
-                    const salesStore = db.createObjectStore('sales', {
-                        keyPath: 'id',
-                        autoIncrement: true
-                    });
-                    salesStore.createIndex('date', 'date');
-                    salesStore.createIndex('productName', 'productName');
+                // Nâng cấp lên phiên bản 3 - Cập nhật để hỗ trợ quản lý công nợ
+                if (oldVersion < 3) {
+                    // Cập nhật object store orders để thêm trường liên quan đến công nợ
+                    if (db.objectStoreNames.contains('orders')) {
+                        const orderStore = db.objectStore('orders');
+                        if (!orderStore.indexNames.contains('paymentStatus')) {
+                            orderStore.createIndex('paymentStatus', 'paymentStatus');
+                        }
+                    }
                 }
             }
         });
@@ -194,42 +292,45 @@ function setupEventListeners() {
     tabs.forEach(tab => {
         tab.addEventListener('shown.bs.tab', async (e) => {
             const targetId = e.target.getAttribute('data-bs-target');
-            
+
             // Nếu là tab khách hàng và module khách hàng tồn tại
             if (targetId === '#customers-tab-pane' && typeof window.loadCustomerModule === 'function') {
                 // Tải lại dữ liệu khách hàng
                 console.log('Tải lại dữ liệu khách hàng khi chuyển tab');
                 await window.loadCustomerModule();
             }
+
+            // Nếu là tab nhà cung cấp và module nhà cung cấp tồn tại
+            if (targetId === '#suppliers-tab-pane' && typeof window.loadSupplierModule === 'function') {
+                // Tải lại dữ liệu nhà cung cấp
+                console.log('Tải lại dữ liệu nhà cung cấp khi chuyển tab');
+                await window.loadSupplierModule();
+            }
+
+            // Nếu là tab sản phẩm và module sản phẩm tồn tại
+            if (targetId === '#products-tab-pane' && typeof window.loadProductModule === 'function') {
+                // Tải lại dữ liệu sản phẩm
+                console.log('Tải lại dữ liệu sản phẩm khi chuyển tab');
+                await window.loadProductModule();
+            }
+
+            // Nếu là tab công nợ
+            if (targetId === '#debts-tab-pane' && typeof window.loadDebtModule === 'function') {
+                // Tải lại dữ liệu công nợ
+                console.log('Tải lại dữ liệu công nợ khi chuyển tab');
+                await window.loadDebtModule();
+            }
+
+            // Nếu là tab báo cáo
+            if (targetId === '#reports-tab-pane') {
+                // Tải lại dữ liệu báo cáo
+                console.log('Tải lại dữ liệu báo cáo khi chuyển tab');
+                await displayReports();
+            }
         });
     });
 
-    // ===== Tab Bán hàng (tab cũ) =====
-    // Form thêm đơn hàng
-    if (document.getElementById('sale-form')) {
-        document.getElementById('sale-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
 
-            const productName = document.getElementById('product-name').value.trim();
-            const quantity = parseInt(document.getElementById('quantity').value);
-            const price = parseFloat(document.getElementById('price').value);
-
-            if (productName && quantity > 0 && price >= 0) {
-                const saleData = {
-                    productName,
-                    quantity,
-                    price,
-                    date: new Date()
-                };
-
-                await addSale(saleData);
-
-                // Reset form
-                document.getElementById('sale-form').reset();
-                document.getElementById('product-name').focus();
-            }
-        });
-    }
 
     // Nút Export Data
     if (document.getElementById('export-btn')) {
@@ -373,7 +474,7 @@ function setupEventListeners() {
     if (document.getElementById('payment-form')) {
         // Đặt giá trị mặc định cho trường ngày thanh toán là ngày hôm nay
         document.getElementById('payment-date').valueAsDate = new Date();
-        
+
         document.getElementById('payment-form').addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -390,17 +491,17 @@ function setupEventListeners() {
                 };
 
                 const paymentId = await addCustomerPayment(paymentData);
-                
+
                 if (paymentId) {
                     // Hiển thị thông báo thành công
                     const alertElement = document.createElement('div');
                     alertElement.className = 'alert alert-success mt-3';
                     alertElement.textContent = 'Đã lưu thanh toán thành công!';
-                    
+
                     // Thêm thông báo vào sau form
                     const formElement = document.getElementById('payment-form');
                     formElement.parentNode.insertBefore(alertElement, formElement.nextSibling);
-                    
+
                     // Tự động ẩn thông báo sau 3 giây
                     setTimeout(() => {
                         alertElement.remove();
@@ -464,139 +565,59 @@ function setupEventListeners() {
     });
 }
 
-// Thêm đơn hàng mới
-async function addSale(saleData) {
-    try {
-        const tx = window.db.transaction('sales', 'readwrite');
-        const store = tx.objectStore('sales');
 
-        const id = await store.add(saleData);
-        await tx.done;
 
-        console.log('Đã thêm đơn hàng mới với ID:', id);
 
-        // Cập nhật giao diện
-        await displaySales();
 
-        return id;
-    } catch (error) {
-        console.error('Lỗi khi thêm đơn hàng:', error);
-        return null;
-    }
-}
 
-// Hiển thị danh sách đơn hàng
-async function displaySales() {
-    try {
-        const salesList = document.getElementById('sales-list');
-        const noDataMessage = document.getElementById('no-data-message');
-        const totalAmountElement = document.getElementById('total-amount');
-
-        // Lấy tất cả đơn hàng từ IndexedDB
-        const tx = window.db.transaction('sales', 'readonly');
-        const store = tx.objectStore('sales');
-        const sales = await store.getAll();
-
-        // Xóa nội dung hiện tại
-        salesList.innerHTML = '';
-
-        // Tính tổng tiền
-        let totalAmount = 0;
-
-        if (sales.length > 0) {
-            // Ẩn thông báo không có dữ liệu
-            noDataMessage.style.display = 'none';
-
-            // Hiển thị từng đơn hàng
-            sales.forEach(sale => {
-                const subtotal = sale.quantity * sale.price;
-                totalAmount += subtotal;
-
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${sale.id}</td>
-                    <td>${sale.productName}</td>
-                    <td class="text-center">${sale.quantity}</td>
-                    <td class="currency">${formatCurrency(sale.price)}</td>
-                    <td class="currency">${formatCurrency(subtotal)}</td>
-                    <td>${formatDate(sale.date)}</td>
-                    <td>
-                        <button class="btn btn-sm btn-danger delete-btn" data-id="${sale.id}">
-                            Xóa
-                        </button>
-                    </td>
-                `;
-
-                salesList.appendChild(row);
-            });
-
-            // Thêm event listener cho các nút xóa
-            document.querySelectorAll('.delete-btn').forEach(button => {
-                button.addEventListener('click', async (e) => {
-                    const id = parseInt(e.target.getAttribute('data-id'));
-                    await deleteSale(id);
-                });
-            });
-        } else {
-            // Hiển thị thông báo không có dữ liệu
-            noDataMessage.style.display = 'block';
-        }
-
-        // Cập nhật tổng tiền
-        totalAmountElement.textContent = `Tổng: ${formatCurrency(totalAmount)}`;
-
-    } catch (error) {
-        console.error('Lỗi khi hiển thị đơn hàng:', error);
-    }
-}
-
-// Xóa đơn hàng
-async function deleteSale(saleId) {
-    try {
-        const tx = window.db.transaction('sales', 'readwrite');
-        const store = tx.objectStore('sales');
-
-        await store.delete(saleId);
-        await tx.done;
-
-        console.log('Đã xóa đơn hàng với ID:', saleId);
-
-        // Cập nhật giao diện
-        await displaySales();
-
-        return true;
-    } catch (error) {
-        console.error('Lỗi khi xóa đơn hàng:', error);
-        return false;
-    }
-}
 
 // Export dữ liệu ra file JSON
 async function exportDataToJson() {
     try {
-        const tx = window.db.transaction('sales', 'readonly');
-        const store = tx.objectStore('sales');
-        const sales = await store.getAll();
+        // Lấy tất cả dữ liệu từ các object store
+        const allData = {};
+        const storeNames = ['customers', 'suppliers', 'products', 'orders', 'trips', 'purchases', 'tripExpenses', 'customerPayments'];
 
-        if (sales.length === 0) {
+        for (const storeName of storeNames) {
+            try {
+                const tx = window.db.transaction(storeName, 'readonly');
+                const store = tx.objectStore(storeName);
+                const data = await store.getAll();
+
+                // Chuyển đổi ngày thành chuỗi để dễ đọc
+                const processedData = data.map(item => {
+                    const newItem = {...item};
+                    // Chuyển đổi các trường ngày thành chuỗi ISO
+                    for (const key in newItem) {
+                        if (newItem[key] instanceof Date) {
+                            newItem[key] = newItem[key].toISOString();
+                        }
+                    }
+                    return newItem;
+                });
+
+                allData[storeName] = processedData;
+            } catch (storeError) {
+                console.warn(`Không thể lấy dữ liệu từ ${storeName}:`, storeError);
+                allData[storeName] = [];
+            }
+        }
+
+        // Kiểm tra xem có dữ liệu nào không
+        const hasData = Object.values(allData).some(arr => arr.length > 0);
+        if (!hasData) {
             alert('Không có dữ liệu để xuất');
             return;
         }
 
-        // Chuyển đổi ngày thành chuỗi để dễ đọc
-        const exportData = sales.map(sale => ({
-            ...sale,
-            date: sale.date.toISOString()
-        }));
-
         // Tạo file JSON
-        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataStr = JSON.stringify(allData, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });
 
         // Tạo link tải xuống
         const downloadLink = document.createElement('a');
         downloadLink.href = URL.createObjectURL(dataBlob);
-        downloadLink.download = `sales-data-${formatDateForFilename(new Date())}.json`;
+        downloadLink.download = `qlbh-data-${formatDateForFilename(new Date())}.json`;
 
         // Thêm link vào DOM, click và xóa
         document.body.appendChild(downloadLink);
@@ -617,48 +638,72 @@ async function importDataFromJson(e) {
         if (!file) return;
 
         const reader = new FileReader();
-
         reader.onload = async (event) => {
             try {
-                const importedData = JSON.parse(event.target.result);
+                const jsonData = JSON.parse(event.target.result);
 
-                if (!Array.isArray(importedData)) {
+                // Kiểm tra xem dữ liệu có đúng định dạng không
+                if (typeof jsonData !== 'object') {
                     throw new Error('Dữ liệu không đúng định dạng');
                 }
 
-                // Xác nhận từ người dùng
-                if (!confirm(`Bạn có chắc muốn nhập ${importedData.length} đơn hàng? Dữ liệu hiện tại sẽ không bị mất.`)) {
+                if (!confirm('Nhập dữ liệu sẽ ghi đè lên dữ liệu hiện tại. Bạn có chắc chắn muốn tiếp tục?')) {
                     return;
                 }
 
-                const tx = db.transaction('sales', 'readwrite');
-                const store = tx.objectStore('sales');
+                // Xác định các object store cần nhập dữ liệu
+                const storeNames = Object.keys(jsonData).filter(name => {
+                    return Array.isArray(jsonData[name]) && jsonData[name].length > 0;
+                });
 
-                // Chuyển đổi chuỗi ngày thành đối tượng Date
-                for (const sale of importedData) {
-                    // Xóa ID để tránh xung đột
-                    const { id, ...saleData } = sale;
-
-                    // Chuyển đổi chuỗi ngày thành đối tượng Date
-                    if (typeof saleData.date === 'string') {
-                        saleData.date = new Date(saleData.date);
-                    }
-
-                    await store.add(saleData);
+                if (storeNames.length === 0) {
+                    throw new Error('Không có dữ liệu hợp lệ để nhập');
                 }
 
-                await tx.done;
+                // Nhập dữ liệu cho từng object store
+                for (const storeName of storeNames) {
+                    try {
+                        // Xóa dữ liệu hiện tại của object store
+                        const clearTx = window.db.transaction(storeName, 'readwrite');
+                        const clearStore = clearTx.objectStore(storeName);
+                        await clearStore.clear();
+                        await clearTx.done;
+                        console.log(`Đã xóa dữ liệu cũ của ${storeName}`);
+
+                        // Thêm dữ liệu mới
+                        const tx = window.db.transaction(storeName, 'readwrite');
+                        const store = tx.objectStore(storeName);
+
+                        for (const item of jsonData[storeName]) {
+                            // Chuyển đổi các trường ngày từ chuỗi thành đối tượng Date
+                            for (const key in item) {
+                                if (typeof item[key] === 'string' && item[key].match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+                                    item[key] = new Date(item[key]);
+                                }
+                            }
+
+                            await store.add(item);
+                        }
+
+                        await tx.done;
+                        console.log(`Đã nhập ${jsonData[storeName].length} bản ghi vào ${storeName}`);
+                    } catch (storeError) {
+                        console.error(`Lỗi khi nhập dữ liệu vào ${storeName}:`, storeError);
+                    }
+                }
+
+                alert('Nhập dữ liệu thành công!');
+                console.log('Nhập dữ liệu thành công');
+
+                // Cập nhật giao diện
+                await loadInitialData();
 
                 // Reset input file
                 e.target.value = '';
-
-                // Cập nhật giao diện
-                await displaySales();
-
-                alert(`Đã nhập ${importedData.length} đơn hàng thành công`);
-            } catch (error) {
-                console.error('Lỗi khi xử lý file JSON:', error);
-                alert('Lỗi khi xử lý file JSON: ' + error.message);
+            } catch (parseError) {
+                console.error('Lỗi khi xử lý file JSON:', parseError);
+                alert('Lỗi khi xử lý file JSON: ' + parseError.message);
+                e.target.value = '';
             }
         };
 
@@ -666,6 +711,7 @@ async function importDataFromJson(e) {
     } catch (error) {
         console.error('Lỗi khi nhập dữ liệu:', error);
         alert('Lỗi khi nhập dữ liệu: ' + error.message);
+        e.target.value = '';
     }
 }
 
