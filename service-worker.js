@@ -15,9 +15,8 @@ const CACHE_ASSETS = [
   './manifest.json',
   'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css',
   'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js',
-  'https://cdn.jsdelivr.net/npm/idb@7.1.1/build/index.min.js',
-  './icons/icon-192x192.png',
-  './icons/icon-512x512.png'
+  'https://cdn.jsdelivr.net/npm/idb@8.0.0/build/umd.js',
+  './icons/icons8-trade-96.png'
 ];
 
 // Sự kiện install - cache tài nguyên
