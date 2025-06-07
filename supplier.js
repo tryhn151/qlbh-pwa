@@ -1,8 +1,56 @@
 // ===== CÁC HÀM XỬ LÝ CHO QUẢN LÝ NHÀ CUNG CẤP =====
 
+// Hàm chờ database sẵn sàng (copy từ customer.js)
+async function waitForDB() {
+    return new Promise((resolve) => {
+        if (window.db) {
+            try {
+                const tx = window.db.transaction('suppliers', 'readonly');
+                tx.abort();
+                resolve(window.db);
+                return;
+            } catch (error) {
+                // Tiếp tục chờ
+            }
+        }
+        
+        let attempts = 0;
+        const maxAttempts = 150;
+        
+        const checkInterval = setInterval(() => {
+            attempts++;
+            
+            if (window.db) {
+                try {
+                    const tx = window.db.transaction('suppliers', 'readonly');
+                    tx.abort();
+                    
+                    clearInterval(checkInterval);
+                    resolve(window.db);
+                } catch (error) {
+                    // Tiếp tục chờ
+                }
+            } else if (attempts >= maxAttempts) {
+                clearInterval(checkInterval);
+                resolve(null);
+            }
+        }, 100);
+        
+        setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve(null);
+        }, 15000);
+    });
+}
+
 // Thêm nhà cung cấp mới
 async function addSupplier(supplierData) {
     try {
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+
         const tx = db.transaction('suppliers', 'readwrite');
         const store = tx.objectStore('suppliers');
         
@@ -25,6 +73,11 @@ async function addSupplier(supplierData) {
 // Cập nhật nhà cung cấp
 async function updateSupplier(supplierId, supplierData) {
     try {
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+
         const tx = db.transaction('suppliers', 'readwrite');
         const store = tx.objectStore('suppliers');
         
@@ -56,6 +109,11 @@ async function updateSupplier(supplierId, supplierData) {
 // Xóa nhà cung cấp
 async function deleteSupplier(supplierId) {
     try {
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+
         // Kiểm tra xem nhà cung cấp có đang được sử dụng không
         const productTx = db.transaction('products', 'readonly');
         const productStore = productTx.objectStore('products');
@@ -107,6 +165,11 @@ async function displaySuppliers() {
         
         if (!suppliersList || !noSuppliersMessage) return;
         
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+        
         // Lấy tất cả nhà cung cấp từ IndexedDB
         const tx = db.transaction('suppliers', 'readonly');
         const store = tx.objectStore('suppliers');
@@ -148,6 +211,17 @@ async function displaySuppliers() {
                     await editSupplier(supplierId);
                 });
             });
+
+            // Thêm event listener cho các nút xóa
+            document.querySelectorAll('.delete-supplier-btn').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const supplierId = parseInt(e.target.getAttribute('data-id'));
+                    
+                    if (confirm('Bạn có chắc chắn muốn xóa nhà cung cấp này?')) {
+                        await deleteSupplier(supplierId);
+                    }
+                });
+            });
         } else {
             // Hiển thị thông báo không có dữ liệu
             noSuppliersMessage.style.display = 'block';
@@ -160,6 +234,11 @@ async function displaySuppliers() {
 // Lấy thông tin nhà cung cấp theo ID
 async function getSupplier(supplierId) {
     try {
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+
         const tx = db.transaction('suppliers', 'readonly');
         const store = tx.objectStore('suppliers');
         
@@ -226,6 +305,11 @@ async function searchSuppliers(keyword) {
         
         if (!suppliersList || !noSuppliersMessage) return;
         
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+        
         // Lấy tất cả nhà cung cấp từ IndexedDB
         const tx = db.transaction('suppliers', 'readonly');
         const store = tx.objectStore('suppliers');
@@ -276,6 +360,17 @@ async function searchSuppliers(keyword) {
                     await editSupplier(supplierId);
                 });
             });
+
+            // Thêm event listener cho các nút xóa
+            document.querySelectorAll('.delete-supplier-btn').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const supplierId = parseInt(e.target.getAttribute('data-id'));
+                    
+                    if (confirm('Bạn có chắc chắn muốn xóa nhà cung cấp này?')) {
+                        await deleteSupplier(supplierId);
+                    }
+                });
+            });
         } else {
             // Hiển thị thông báo không có dữ liệu
             noSuppliersMessage.style.display = 'block';
@@ -292,6 +387,12 @@ async function populateSupplierDropdowns() {
         // Lấy tất cả các dropdown nhà cung cấp
         const supplierDropdowns = document.querySelectorAll('select[data-supplier-dropdown]');
         if (supplierDropdowns.length === 0) return;
+        
+        const db = await waitForDB();
+        if (!db) {
+            console.error('Không thể kết nối đến cơ sở dữ liệu để tải danh sách nhà cung cấp');
+            return;
+        }
         
         // Lấy danh sách nhà cung cấp từ IndexedDB
         const tx = db.transaction('suppliers', 'readonly');
@@ -356,6 +457,14 @@ function setupSupplierEventListeners() {
     // Form thêm/sửa nhà cung cấp
     const supplierForm = document.getElementById('supplier-form');
     if (supplierForm) {
+        // Kiểm tra xem đã có event listener chưa
+        if (supplierForm.hasAttribute('data-listener-added')) {
+            return;
+        }
+        
+        // Đánh dấu đã thêm event listener
+        supplierForm.setAttribute('data-listener-added', 'true');
+        
         supplierForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -425,6 +534,7 @@ function setupSupplierEventListeners() {
 window.loadSupplierModule = async function() {
     try {
         // Đảm bảo DB đã sẵn sàng
+        const db = await waitForDB();
         if (!db) {
             console.error('Không thể khởi tạo module nhà cung cấp: Database chưa sẵn sàng');
             return false;

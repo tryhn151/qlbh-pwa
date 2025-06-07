@@ -31,7 +31,7 @@ async function waitForDB() {
         
         // Nếu chưa, thiết lập một interval để kiểm tra định kỳ
         let attempts = 0;
-        const maxAttempts = 100; // Tăng số lần thử lên 100 (~10 giây)
+        const maxAttempts = 150; // Tăng lên 150 lần (~15 giây)
         
         const checkInterval = setInterval(() => {
             attempts++;
@@ -46,7 +46,7 @@ async function waitForDB() {
                     console.log(`Database đã sẵn sàng sau ${attempts} lần thử`);
                     resolve(window.db);
                 } catch (error) {
-                    console.log(`Lần thử ${attempts}: Database chưa sẵn sàng cho transaction`);
+                    console.log(`Lần thử ${attempts}: Database chưa sẵn sàng cho transaction - ${error.message}`);
                     // Tiếp tục chờ
                 }
             } else if (attempts >= maxAttempts) {
@@ -56,12 +56,12 @@ async function waitForDB() {
             }
         }, 100); // Kiểm tra mỗi 100ms
         
-        // Đặt timeout để tránh chờ vô hạn (tăng lên 10 giây)
+        // Đặt timeout để tránh chờ vô hạn (tăng lên 15 giây)
         setTimeout(() => {
             clearInterval(checkInterval);
-            console.error('Lỗi: Không thể kết nối đến cơ sở dữ liệu sau 10 giây');
+            console.error('Lỗi: Không thể kết nối đến cơ sở dữ liệu sau 15 giây');
             resolve(null); // Resolve với null để code có thể xử lý lỗi
-        }, 10000); // Timeout sau 10 giây
+        }, 15000); // Timeout sau 15 giây
     });
 }
 

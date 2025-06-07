@@ -1,8 +1,56 @@
 // ===== CÁC HÀM XỬ LÝ CHO QUẢN LÝ SẢN PHẨM =====
 
+// Hàm chờ database sẵn sàng (copy từ customer.js)
+async function waitForDB() {
+    return new Promise((resolve) => {
+        if (window.db) {
+            try {
+                const tx = window.db.transaction('products', 'readonly');
+                tx.abort();
+                resolve(window.db);
+                return;
+            } catch (error) {
+                // Tiếp tục chờ
+            }
+        }
+        
+        let attempts = 0;
+        const maxAttempts = 150;
+        
+        const checkInterval = setInterval(() => {
+            attempts++;
+            
+            if (window.db) {
+                try {
+                    const tx = window.db.transaction('products', 'readonly');
+                    tx.abort();
+                    
+                    clearInterval(checkInterval);
+                    resolve(window.db);
+                } catch (error) {
+                    // Tiếp tục chờ
+                }
+            } else if (attempts >= maxAttempts) {
+                clearInterval(checkInterval);
+                resolve(null);
+            }
+        }, 100);
+        
+        setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve(null);
+        }, 15000);
+    });
+}
+
 // Thêm sản phẩm mới
 async function addProduct(productData) {
     try {
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+
         const tx = db.transaction('products', 'readwrite');
         const store = tx.objectStore('products');
         
@@ -25,6 +73,11 @@ async function addProduct(productData) {
 // Cập nhật sản phẩm
 async function updateProduct(productId, productData) {
     try {
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+
         const tx = db.transaction('products', 'readwrite');
         const store = tx.objectStore('products');
         
@@ -56,6 +109,11 @@ async function updateProduct(productId, productData) {
 // Xóa sản phẩm
 async function deleteProduct(productId) {
     try {
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+
         // Kiểm tra xem sản phẩm có đang được sử dụng trong đơn hàng không
         const orderItemsTx = db.transaction('orderItems', 'readonly');
         const orderItemsStore = orderItemsTx.objectStore('orderItems');
@@ -106,6 +164,11 @@ async function displayProducts() {
         const noProductsMessage = document.getElementById('no-products-message');
         
         if (!productsList || !noProductsMessage) return;
+        
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
         
         // Lấy tất cả sản phẩm từ IndexedDB
         const tx = db.transaction(['products', 'suppliers'], 'readonly');
@@ -159,6 +222,17 @@ async function displayProducts() {
                     await editProduct(productId);
                 });
             });
+
+            // Thêm event listener cho các nút xóa
+            document.querySelectorAll('.delete-product-btn').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const productId = parseInt(e.target.getAttribute('data-id'));
+                    
+                    if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) {
+                        await deleteProduct(productId);
+                    }
+                });
+            });
         } else {
             // Hiển thị thông báo không có dữ liệu
             noProductsMessage.style.display = 'block';
@@ -171,6 +245,11 @@ async function displayProducts() {
 // Lấy thông tin sản phẩm theo ID
 async function getProduct(productId) {
     try {
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+
         const tx = db.transaction('products', 'readonly');
         const store = tx.objectStore('products');
         
@@ -243,6 +322,11 @@ async function searchProducts(keyword) {
         
         if (!productsList || !noProductsMessage) return;
         
+        const db = await waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+        }
+        
         // Lấy tất cả sản phẩm từ IndexedDB
         const tx = db.transaction(['products', 'suppliers'], 'readonly');
         const productStore = tx.objectStore('products');
@@ -303,6 +387,17 @@ async function searchProducts(keyword) {
                     await editProduct(productId);
                 });
             });
+
+            // Thêm event listener cho các nút xóa
+            document.querySelectorAll('.delete-product-btn').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const productId = parseInt(e.target.getAttribute('data-id'));
+                    
+                    if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) {
+                        await deleteProduct(productId);
+                    }
+                });
+            });
         } else {
             // Hiển thị thông báo không có dữ liệu
             noProductsMessage.style.display = 'block';
@@ -319,6 +414,12 @@ async function populateProductDropdowns() {
         // Lấy tất cả các dropdown sản phẩm
         const productDropdowns = document.querySelectorAll('select[data-product-dropdown]');
         if (productDropdowns.length === 0) return;
+        
+        const db = await waitForDB();
+        if (!db) {
+            console.error('Không thể kết nối đến cơ sở dữ liệu để tải danh sách sản phẩm');
+            return;
+        }
         
         // Lấy danh sách sản phẩm từ IndexedDB
         const tx = db.transaction('products', 'readonly');
@@ -383,6 +484,14 @@ function setupProductEventListeners() {
     // Form thêm/sửa sản phẩm
     const productForm = document.getElementById('product-form');
     if (productForm) {
+        // Kiểm tra xem đã có event listener chưa
+        if (productForm.hasAttribute('data-listener-added')) {
+            return;
+        }
+        
+        // Đánh dấu đã thêm event listener
+        productForm.setAttribute('data-listener-added', 'true');
+        
         productForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -454,6 +563,7 @@ function setupProductEventListeners() {
 window.loadProductModule = async function() {
     try {
         // Đảm bảo DB đã sẵn sàng
+        const db = await waitForDB();
         if (!db) {
             console.error('Không thể khởi tạo module sản phẩm: Database chưa sẵn sàng');
             return false;

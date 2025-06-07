@@ -46,8 +46,14 @@ async function loadInitialData() {
             console.warn('Module sản phẩm chưa sẵn sàng - sẽ được khởi tạo sau');
         }
 
-        // Hiển thị danh sách đơn hàng
-        await displayOrders();
+        // Tải module đơn hàng nếu hàm có sẵn
+        if (typeof window.loadOrderModule === 'function') {
+            await window.loadOrderModule();
+        } else {
+            console.warn('Module đơn hàng chưa sẵn sàng - sẽ được khởi tạo sau');
+            // Hiển thị danh sách đơn hàng (fallback cũ)
+            await displayOrders();
+        }
 
         // Hiển thị danh sách chuyến hàng
         await displayTrips();
@@ -109,27 +115,24 @@ async function initDB() {
     try {
         console.log('Đang khởi tạo IndexedDB...');
 
-        // Kiểm tra xem idb có sẵn không
-        if (typeof idb === 'undefined') {
-            console.error('Thư viện idb không được tải. Đang thử lại sau 1 giây...');
+        // Kiểm tra xem idb có sẵn không với retry logic tốt hơn
+        let retryCount = 0;
+        const maxRetries = 30; // 3 giây
+        
+        while (typeof idb === 'undefined' && retryCount < maxRetries) {
+            console.log(`Chờ thư viện idb... lần thử ${retryCount + 1}`);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            retryCount++;
+        }
 
-            // Thử lại sau 1 giây
-            return new Promise(resolve => {
-                setTimeout(async () => {
-                    if (typeof idb === 'undefined') {
-                        console.error('Thư viện idb vẫn không được tải sau khi thử lại.');
-                        resolve(false);
-                    } else {
-                        const result = await initDB();
-                        resolve(result);
-                    }
-                }, 1000);
-            });
+        if (typeof idb === 'undefined') {
+            console.error('Thư viện idb không được tải sau 3 giây. Kiểm tra kết nối internet.');
+            throw new Error('Thư viện idb không được tải. Vui lòng tải lại trang.');
         }
 
         console.log('Thư viện idb đã được tải, tiếp tục khởi tạo database...');
         window.db = await idb.openDB('salesAppDB', 3, {
-            upgrade(db, oldVersion, newVersion) {
+            upgrade(db, oldVersion, newVersion, transaction) {
                 console.log(`Đang nâng cấp database từ phiên bản ${oldVersion} lên ${newVersion}...`);
 
                 // Nâng cấp từ phiên bản cũ hoặc tạo mới
@@ -258,9 +261,10 @@ async function initDB() {
 
                 // Nâng cấp lên phiên bản 3 - Cập nhật để hỗ trợ quản lý công nợ
                 if (oldVersion < 3) {
-                    // Cập nhật object store orders để thêm trường liên quan đến công nợ
+                    // Trong upgrade callback, sử dụng transaction được cung cấp để truy cập object store
                     if (db.objectStoreNames.contains('orders')) {
-                        const orderStore = db.objectStore('orders');
+                        // Dùng transaction.objectStore thay vì db.objectStore
+                        const orderStore = transaction.objectStore('orders');
                         if (!orderStore.indexNames.contains('paymentStatus')) {
                             orderStore.createIndex('paymentStatus', 'paymentStatus');
                         }
