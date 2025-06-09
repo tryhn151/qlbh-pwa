@@ -384,14 +384,17 @@ async function searchSuppliers(keyword) {
 // Đổ danh sách nhà cung cấp vào dropdown
 async function populateSupplierDropdowns() {
     try {
-        // Lấy tất cả các dropdown nhà cung cấp
-        const supplierDropdowns = document.querySelectorAll('select[data-supplier-dropdown]');
-        if (supplierDropdowns.length === 0) return;
+        // Lấy tất cả các dropdown nhà cung cấp (bao gồm cả trong order form và product form)
+        const supplierDropdowns = document.querySelectorAll('.supplier-select, #product-supplier, [data-supplier-dropdown]');
+        if (supplierDropdowns.length === 0) {
+            console.log('Không tìm thấy dropdown nhà cung cấp nào');
+            return false;
+        }
         
         const db = await waitForDB();
         if (!db) {
             console.error('Không thể kết nối đến cơ sở dữ liệu để tải danh sách nhà cung cấp');
-            return;
+            return false;
         }
         
         // Lấy danh sách nhà cung cấp từ IndexedDB
@@ -422,9 +425,67 @@ async function populateSupplierDropdowns() {
                 dropdown.value = selectedValue;
             }
         });
+        
+        console.log(`✅ Populate ${supplierDropdowns.length} dropdown(s) với ${suppliers.length} suppliers`);
+        return true;
     } catch (error) {
         console.error('Lỗi khi đổ danh sách nhà cung cấp vào dropdown:', error);
+        return false;
     }
+}
+
+// Hàm populate với retry mechanism để xử lý race condition
+async function populateSupplierDropdownsWithRetry(maxAttempts = 3) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            // Thêm delay tăng dần cho mỗi lần retry
+            if (attempt > 1) {
+                await new Promise(resolve => setTimeout(resolve, 300 * (attempt - 1)));
+                console.log(`🔄 Retry populate suppliers lần ${attempt}...`);
+            }
+            
+            const result = await populateSupplierDropdowns();
+            if (result) {
+                console.log(`✅ Populate suppliers thành công ở lần thử ${attempt}`);
+                return true;
+            }
+        } catch (error) {
+            console.log(`❌ Lần thử ${attempt} thất bại:`, error.message);
+            if (attempt === maxAttempts) {
+                console.error('🚨 Đã thử tối đa', maxAttempts, 'lần nhưng vẫn không thể populate supplier dropdown');
+                
+                // Fallback: Thử populate trực tiếp với DOM observer
+                observeAndPopulateSuppliers();
+            }
+        }
+    }
+    return false;
+}
+
+// Observer để tự động populate khi DOM element xuất hiện
+function observeAndPopulateSuppliers() {
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'childList') {
+                const productSupplierDropdown = document.getElementById('product-supplier');
+                if (productSupplierDropdown && productSupplierDropdown.options.length <= 1) {
+                    console.log('🔍 Detected empty product-supplier dropdown, attempting populate...');
+                    populateSupplierDropdowns();
+                }
+            }
+        });
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    
+    // Auto disconnect after 5 seconds to avoid memory leaks
+    setTimeout(() => {
+        observer.disconnect();
+        console.log('🔍 Supplier dropdown observer disconnected');
+    }, 5000);
 }
 
 // Tạo ô tìm kiếm nhà cung cấp
@@ -551,6 +612,10 @@ window.loadSupplierModule = async function() {
         
         // Thiết lập các event listener
         setupSupplierEventListeners();
+        
+        // Đăng ký các hàm populate làm global
+        window.populateSupplierDropdowns = populateSupplierDropdowns;
+        window.populateSupplierDropdownsWithRetry = populateSupplierDropdownsWithRetry;
         
         console.log('Module nhà cung cấp đã khởi tạo thành công');
         return true;

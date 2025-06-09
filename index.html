@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Ứng dụng quản lý bán hàng cá nhân">
-    <meta name="theme-color" content="#007bff">
-    <title>Quản Lý Bán Hàng</title>
+            <meta name="description" content="Ứng dụng quản lý bán hàng gốm sứ">
+        <meta name="theme-color" content="#6c5ce7">
+    <title>Quản Lý Bán Hàng - Gốm Sứ</title>
 
     <!-- Thư viện idb cho IndexedDB -->
     <script src="https://cdn.jsdelivr.net/npm/idb@8.0.0/build/umd.js"></script>
@@ -20,18 +20,25 @@
     <link rel="manifest" href="manifest.json">
 
     <!-- iOS support -->
-    <link rel="apple-touch-icon" href="icons/icons8-trade-96.png">
+    <link rel="apple-touch-icon" href="icons/ceramics-logo.jpg">
+    <link rel="icon" type="image/jpeg" href="icons/ceramics-logo.jpg">
 </head>
 <body>
     <div class="container py-4">
         <header class="pb-3 mb-4 border-bottom">
-            <h1 class="display-5 fw-bold">Quản Lý Bán Hàng</h1>
+            <h1 class="display-5 fw-bold">Gốm sứ Nguyễn Ngọc</h1>
         </header>
 
         <!-- Tabs -->
         <ul class="nav nav-tabs mb-4" id="myTab" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="customers-tab" data-bs-toggle="tab" data-bs-target="#customers-tab-pane" type="button" role="tab" aria-controls="customers-tab-pane" aria-selected="true">Khách hàng</button>
+                <button class="nav-link active" id="suppliers-tab" data-bs-toggle="tab" data-bs-target="#suppliers-tab-pane" type="button" role="tab" aria-controls="suppliers-tab-pane" aria-selected="false">Nhà cung cấp</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="products-tab" data-bs-toggle="tab" data-bs-target="#products-tab-pane" type="button" role="tab" aria-controls="products-tab-pane" aria-selected="false">Sản phẩm</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="customers-tab" data-bs-toggle="tab" data-bs-target="#customers-tab-pane" type="button" role="tab" aria-controls="customers-tab-pane" aria-selected="true">Khách hàng</button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders-tab-pane" type="button" role="tab" aria-controls="orders-tab-pane" aria-selected="false">Đơn hàng</button>
@@ -40,19 +47,16 @@
                 <button class="nav-link" id="trips-tab" data-bs-toggle="tab" data-bs-target="#trips-tab-pane" type="button" role="tab" aria-controls="trips-tab-pane" aria-selected="false">Chuyến hàng</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="suppliers-tab" data-bs-toggle="tab" data-bs-target="#suppliers-tab-pane" type="button" role="tab" aria-controls="suppliers-tab-pane" aria-selected="false">Nhà cung cấp</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="products-tab" data-bs-toggle="tab" data-bs-target="#products-tab-pane" type="button" role="tab" aria-controls="products-tab-pane" aria-selected="false">Sản phẩm</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="payments-tab" data-bs-toggle="tab" data-bs-target="#payments-tab-pane" type="button" role="tab" aria-controls="payments-tab-pane" aria-selected="false">Thanh toán</button>
-            </li>
-            <li class="nav-item" role="presentation">
                 <button class="nav-link" id="debts-tab" data-bs-toggle="tab" data-bs-target="#debts-tab-pane" type="button" role="tab" aria-controls="debts-tab-pane" aria-selected="false">Công nợ</button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="reports-tab" data-bs-toggle="tab" data-bs-target="#reports-tab-pane" type="button" role="tab" aria-controls="reports-tab-pane" aria-selected="false">Báo cáo</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="admin-tab" data-bs-toggle="tab" data-bs-target="#admin-tab-pane" type="button" role="tab" aria-controls="admin-tab-pane" aria-selected="false">Quản trị dữ liệu</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="guide-tab" data-bs-toggle="tab" data-bs-target="#guide-tab-pane" type="button" role="tab" aria-controls="guide-tab-pane" aria-selected="false">📖 Hướng dẫn sử dụng</button>
             </li>
         </ul>
 
@@ -60,7 +64,7 @@
         <div class="tab-content" id="myTabContent">
 
             <!-- Tab Khách hàng -->
-            <div class="tab-pane fade show active" id="customers-tab-pane" role="tabpanel" aria-labelledby="customers-tab" tabindex="0">
+            <div class="tab-pane fade" id="customers-tab-pane" role="tabpanel" aria-labelledby="customers-tab" tabindex="0">
                 <div class="row g-4">
                     <!-- Form thêm khách hàng -->
                     <div class="col-md-4">
@@ -75,8 +79,8 @@
                                         <input type="text" class="form-control" id="customer-name" required>
                                     </div>
                                     <div class="mb-3">
-                                        <label for="customer-contact" class="form-label">Liên hệ (SĐT/Email)</label>
-                                        <input type="text" class="form-control" id="customer-contact">
+                                        <label for="customer-contact" class="form-label">Số điện thoại</label>
+                                        <input type="tel" class="form-control" id="customer-contact" placeholder="Ví dụ: 0909123456">
                                     </div>
                                     <button type="submit" class="btn btn-primary w-100">Lưu khách hàng</button>
                                 </form>
@@ -92,13 +96,13 @@
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
-                                    <table class="table table-striped table-hover">
-                                        <thead>
+                                    <table class="table table-striped table-hover align-middle">
+                                        <thead class="table-dark">
                                             <tr>
-                                                <th>ID</th>
-                                                <th>Tên khách hàng</th>
-                                                <th>Liên hệ</th>
-                                                <th>Thao tác</th>
+                                                <th scope="col" class="text-center" style="width: 80px;">ID</th>
+                                                <th scope="col">Tên khách hàng</th>
+                                                <th scope="col">Số điện thoại</th>
+                                                <th scope="col" class="text-center" style="width: 120px;">Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody id="customers-list">
@@ -135,60 +139,77 @@
                                     </div>
 
                                     <div class="mb-3">
-                                        <label class="form-label">Sản phẩm trong đơn hàng</label>
-                                        <div id="order-items">
-                                            <div class="order-item mb-3 p-3 border rounded">
+                                        <label class="form-label">Danh sách nhà cung cấp và sản phẩm</label>
+                                        <div id="order-suppliers">
+                                            <div class="supplier-group mb-4 p-3 border rounded bg-light">
                                                 <div class="d-flex justify-content-between align-items-center mb-3">
-                                                    <label class="form-label mb-0 fw-bold">Sản phẩm #1</label>
-                                                    <button type="button" class="btn btn-sm btn-outline-danger remove-item-btn" style="display: none;">
-                                                        <i class="bi bi-x"></i> Xóa
+                                                    <label class="form-label mb-0 fw-bold text-primary">Nhà cung cấp #1</label>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger remove-supplier-btn" style="display: none;">
+                                                        <i class="bi bi-x"></i> Xóa nhà cung cấp
                                                     </button>
                                                 </div>
                                                 
-                                                <div class="mb-2">
-                                                    <label class="form-label">Nhà cung cấp</label>
+                                                <div class="mb-3">
+                                                    <label class="form-label">Chọn nhà cung cấp</label>
                                                     <select class="form-control supplier-select" required>
                                                         <option value="" selected disabled>Chọn nhà cung cấp</option>
                                                         <!-- Danh sách nhà cung cấp sẽ được thêm vào đây bằng JavaScript -->
                                                     </select>
                                                 </div>
-                                                
-                                                <div class="mb-2">
-                                                    <label class="form-label">Sản phẩm</label>
-                                                    <select class="form-control product-select" required disabled>
-                                                        <option value="" selected disabled>Chọn nhà cung cấp trước</option>
-                                                    </select>
-                                                </div>
-                                                
-                                                <div class="row">
-                                                    <div class="col-4 mb-2">
-                                                        <label class="form-label">Số lượng</label>
-                                                        <input type="number" class="form-control product-qty" min="1" value="1" required>
-                                                    </div>
-                                                    <div class="col-4 mb-2">
-                                                        <label class="form-label">Giá nhập (VNĐ)</label>
-                                                        <input type="number" class="form-control product-purchase-price" min="0" readonly>
-                                                        <small class="text-muted">Giá tham khảo</small>
-                                                    </div>
-                                                    <div class="col-4 mb-2">
-                                                        <label class="form-label">Giá bán (VNĐ)</label>
-                                                        <input type="number" class="form-control product-selling-price" min="0" required>
-                                                        <small class="text-muted">Giá bán cho khách</small>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div class="row mt-2">
-                                                    <div class="col-12">
-                                                        <div class="bg-light p-2 rounded">
-                                                            <strong>Thành tiền: <span class="item-total">0 VNĐ</span></strong>
-                                                            <span class="profit-info ms-3 text-success"></span>
+
+                                                <div class="products-container">
+                                                    <label class="form-label fw-bold">Sản phẩm từ nhà cung cấp này:</label>
+                                                    <div class="product-items">
+                                                        <div class="product-item mb-3 p-3 border rounded bg-white">
+                                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                                <label class="form-label mb-0 fw-bold">Sản phẩm #1</label>
+                                                                <button type="button" class="btn btn-sm btn-outline-warning remove-product-btn" style="display: none;">
+                                                                    <i class="bi bi-x"></i> Xóa SP
+                                                                </button>
+                                                            </div>
+                                                            
+                                                            <div class="mb-2">
+                                                                <label class="form-label">Sản phẩm</label>
+                                                                <select class="form-control product-select" required disabled>
+                                                                    <option value="" selected disabled>Chọn nhà cung cấp trước</option>
+                                                                </select>
+                                                            </div>
+                                                            
+                                                            <div class="row">
+                                                                <div class="col-4 mb-2">
+                                                                    <label class="form-label">Số lượng</label>
+                                                                    <input type="number" class="form-control product-qty" min="1" value="1" required>
+                                                                </div>
+                                                                <div class="col-4 mb-2">
+                                                                    <label class="form-label">Giá nhập</label>
+                                                                    <input type="number" class="form-control product-purchase-price" min="0" readonly>
+                                                                    <small class="text-muted">Giá tham khảo</small>
+                                                                </div>
+                                                                <div class="col-4 mb-2">
+                                                                    <label class="form-label">Giá bán</label>
+                                                                    <input type="number" class="form-control product-selling-price" min="0" required>
+                                                                    <small class="text-muted">Giá bán cho khách</small>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <div class="row mt-2">
+                                                                <div class="col-12">
+                                                                    <div class="bg-light p-2 rounded">
+                                                                        <strong>Thành tiền: <span class="item-total">0 VNĐ</span></strong>
+                                                                        <span class="profit-info ms-3 text-success"></span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
+                                                    <button type="button" class="btn btn-sm btn-outline-success add-product-to-supplier-btn">
+                                                        <i class="bi bi-plus"></i> Thêm sản phẩm từ nhà cung cấp này
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
-                                        <button type="button" id="add-product-btn" class="btn btn-sm btn-outline-primary mt-2">
-                                            <i class="bi bi-plus-circle"></i> Thêm sản phẩm khác
+                                        <button type="button" id="add-supplier-btn" class="btn btn-sm btn-outline-primary mt-2">
+                                            <i class="bi bi-plus-circle"></i> Thêm nhà cung cấp khác
                                         </button>
                                         
                                         <div class="mt-3 p-3 bg-info bg-opacity-10 rounded">
@@ -218,16 +239,16 @@
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
-                                    <table class="table table-striped table-hover">
-                                        <thead>
+                                    <table class="table table-striped table-hover align-middle">
+                                        <thead class="table-dark">
                                             <tr>
-                                                <th>ID</th>
-                                                <th>Khách hàng</th>
-                                                <th>Nhà cung cấp</th>
-                                                <th>Ngày đặt</th>
-                                                <th>Trạng thái</th>
-                                                <th>Tổng tiền</th>
-                                                <th>Thao tác</th>
+                                                <th scope="col" class="text-center" style="width: 80px;">ID</th>
+                                                <th scope="col">Khách hàng</th>
+                                                <th scope="col">Nhà cung cấp</th>
+                                                <th scope="col" class="text-center" style="width: 110px;">Ngày đặt</th>
+                                                <th scope="col" class="text-center" style="width: 120px;">Trạng thái</th>
+                                                <th scope="col" class="text-end" style="width: 130px;">Tổng tiền</th>
+                                                <th scope="col" class="text-center" style="width: 180px;">Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody id="orders-list">
@@ -277,14 +298,14 @@
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
-                                    <table class="table table-striped table-hover">
-                                        <thead>
+                                    <table class="table table-striped table-hover align-middle">
+                                        <thead class="table-dark">
                                             <tr>
-                                                <th>ID</th>
-                                                <th>Tên chuyến</th>
-                                                <th>Ngày</th>
-                                                <th>Trạng thái</th>
-                                                <th>Thao tác</th>
+                                                <th scope="col" class="text-center" style="width: 80px;">ID</th>
+                                                <th scope="col">Tên chuyến</th>
+                                                <th scope="col" class="text-center" style="width: 110px;">Ngày</th>
+                                                <th scope="col" class="text-center" style="width: 120px;">Trạng thái</th>
+                                                <th scope="col" class="text-center" style="width: 160px;">Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody id="trips-list">
@@ -302,7 +323,7 @@
             </div>
 
             <!-- Tab Nhà cung cấp -->
-            <div class="tab-pane fade" id="suppliers-tab-pane" role="tabpanel" aria-labelledby="suppliers-tab" tabindex="0">
+            <div class="tab-pane fade show active" id="suppliers-tab-pane" role="tabpanel" aria-labelledby="suppliers-tab" tabindex="0">
                 <div class="row g-4">
                     <!-- Form thêm nhà cung cấp -->
                     <div class="col-md-4">
@@ -325,8 +346,8 @@
                                         <input type="text" class="form-control" id="supplier-address">
                                     </div>
                                     <div class="mb-3">
-                                        <label for="supplier-contact" class="form-label">Liên hệ (SĐT/Email)</label>
-                                        <input type="text" class="form-control" id="supplier-contact">
+                                        <label for="supplier-contact" class="form-label">Số điện thoại</label>
+                                        <input type="tel" class="form-control" id="supplier-contact" placeholder="Ví dụ: 0909123456">
                                     </div>
                                     <div class="d-flex justify-content-between">
                                         <button type="submit" class="btn btn-primary">Thêm nhà cung cấp</button>
@@ -345,15 +366,15 @@
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
-                                    <table class="table table-striped table-hover">
-                                        <thead>
+                                    <table class="table table-striped table-hover align-middle">
+                                        <thead class="table-dark">
                                             <tr>
-                                                <th>ID</th>
-                                                <th>Tên nhà cung cấp</th>
-                                                <th>Khu vực</th>
-                                                <th>Địa chỉ</th>
-                                                <th>Liên hệ</th>
-                                                <th>Thao tác</th>
+                                                <th scope="col" class="text-center" style="width: 80px;">ID</th>
+                                                <th scope="col">Tên nhà cung cấp</th>
+                                                <th scope="col" style="width: 120px;">Khu vực</th>
+                                                <th scope="col">Địa chỉ</th>
+                                                <th scope="col" style="width: 140px;">Số điện thoại</th>
+                                                <th scope="col" class="text-center" style="width: 120px;">Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody id="suppliers-list">
@@ -382,19 +403,19 @@
                             <div class="card-body">
                                 <form id="product-form">
                                     <div class="mb-3">
-                                        <label for="product-name" class="form-label">Tên sản phẩm</label>
-                                        <input type="text" class="form-control" id="product-name" required>
-                                    </div>
-                                    <div class="mb-3">
                                         <label for="product-code" class="form-label">Mã sản phẩm</label>
                                         <input type="text" class="form-control" id="product-code">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="product-name" class="form-label">Tên sản phẩm</label>
+                                        <input type="text" class="form-control" id="product-name" required>
                                     </div>
                                     <div class="mb-3">
                                         <label for="product-unit" class="form-label">Đơn vị tính</label>
                                         <input type="text" class="form-control" id="product-unit" placeholder="Ví dụ: cái, hộp, kg,...">
                                     </div>
                                     <div class="mb-3">
-                                        <label for="product-purchase-price" class="form-label">Giá nhập (VNĐ)</label>
+                                        <label for="product-purchase-price" class="form-label">Giá nhập</label>
                                         <input type="number" class="form-control" id="product-purchase-price" min="0">
                                     </div>
                                     <div class="mb-3">
@@ -421,16 +442,16 @@
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
-                                    <table class="table table-striped table-hover">
-                                        <thead>
+                                    <table class="table table-striped table-hover align-middle">
+                                        <thead class="table-dark">
                                             <tr>
-                                                <th>ID</th>
-                                                <th>Tên sản phẩm</th>
-                                                <th>Mã</th>
-                                                <th>Đơn vị</th>
-                                                <th>Giá nhập</th>
-                                                <th>Nhà cung cấp</th>
-                                                <th>Thao tác</th>
+                                                <th scope="col" class="text-center" style="width: 80px;">ID</th>
+                                                <th scope="col">Tên sản phẩm</th>
+                                                <th scope="col" style="width: 100px;">Mã SP</th>
+                                                <th scope="col" class="text-center" style="width: 80px;">Đơn vị</th>
+                                                <th scope="col" class="text-end" style="width: 120px;">Giá nhập</th>
+                                                <th scope="col" style="width: 140px;">Nhà cung cấp</th>
+                                                <th scope="col" class="text-center" style="width: 120px;">Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody id="products-list">
@@ -440,71 +461,6 @@
                                 </div>
                                 <div id="no-products-message" class="text-center py-3 text-muted">
                                     Chưa có dữ liệu sản phẩm
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Tab Thanh toán -->
-            <div class="tab-pane fade" id="payments-tab-pane" role="tabpanel" aria-labelledby="payments-tab" tabindex="0">
-                <div class="row g-4">
-                    <!-- Form ghi nhận thanh toán -->
-                    <div class="col-md-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">Ghi nhận thanh toán</h5>
-                            </div>
-                            <div class="card-body">
-                                <form id="payment-form">
-                                    <div class="mb-3">
-                                        <label for="payment-customer" class="form-label">Khách hàng</label>
-                                        <select class="form-select" id="payment-customer" required>
-                                            <option value="" selected disabled>Chọn khách hàng</option>
-                                            <!-- Danh sách khách hàng sẽ được thêm vào đây bằng JavaScript -->
-                                        </select>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="payment-amount" class="form-label">Số tiền thanh toán (VNĐ)</label>
-                                        <input type="number" class="form-control" id="payment-amount" min="0" required>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="payment-date" class="form-label">Ngày thanh toán</label>
-                                        <input type="date" class="form-control" id="payment-date" required>
-                                    </div>
-                                    <button type="submit" class="btn btn-primary w-100">Lưu thanh toán</button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Danh sách thanh toán -->
-                    <div class="col-md-8">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">Lịch sử thanh toán</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-striped table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>ID</th>
-                                                <th>Khách hàng</th>
-                                                <th>Số tiền</th>
-                                                <th>Ngày thanh toán</th>
-                                                <th>Đơn hàng</th>
-                                                <th>Thao tác</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="payments-list">
-                                            <!-- Dữ liệu sẽ được thêm vào đây bằng JavaScript -->
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div id="no-payments-message" class="text-center py-3 text-muted">
-                                    Chưa có dữ liệu thanh toán
                                 </div>
                             </div>
                         </div>
@@ -531,7 +487,7 @@
                             </div>
                             <div class="card-body">
                                 <div class="row">
-                                    <div class="col-md-4">
+                                    <div class="col-md-6">
                                         <div class="card bg-light">
                                             <div class="card-body text-center">
                                                 <h6 class="card-title">Tổng công nợ</h6>
@@ -539,19 +495,11 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-6">
                                         <div class="card bg-light">
                                             <div class="card-body text-center">
                                                 <h6 class="card-title">Số khách hàng đang nợ</h6>
                                                 <p class="card-text fs-4" id="total-debtors">0</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="card bg-light">
-                                            <div class="card-body text-center">
-                                                <h6 class="card-title">Nợ quá hạn</h6>
-                                                <p class="card-text fs-4 text-warning" id="overdue-debt-amount">0 VNĐ</p>
                                             </div>
                                         </div>
                                     </div>
@@ -571,15 +519,16 @@
                                     <input type="text" class="form-control" id="debt-search" placeholder="Tìm kiếm khách hàng...">
                                 </div>
                                 <div class="table-responsive">
-                                    <table class="table table-striped table-hover">
-                                        <thead>
+                                    <table class="table table-striped table-hover align-middle">
+                                        <thead class="table-dark">
                                             <tr>
-                                                <th>ID</th>
-                                                <th>Tên khách hàng</th>
-                                                <th>Số đơn nợ</th>
-                                                <th>Tổng nợ</th>
-                                                <th>Nợ quá hạn</th>
-                                                <th>Thao tác</th>
+                                                <th scope="col" class="text-center" style="width: 80px;">ID</th>
+                                                <th scope="col">Tên khách hàng</th>
+                                                <th scope="col" class="text-center" style="width: 100px;">Số đơn nợ</th>
+                                                <th scope="col" class="text-end" style="width: 130px;">Tổng giá trị</th>
+                                                <th scope="col" class="text-end" style="width: 130px;">Đã thanh toán</th>
+                                                <th scope="col" class="text-end" style="width: 120px;">Còn nợ</th>
+                                                <th scope="col" class="text-center" style="width: 120px;">Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody id="customer-debts-list">
@@ -600,7 +549,7 @@
             <div class="tab-pane fade" id="reports-tab-pane" role="tabpanel" aria-labelledby="reports-tab" tabindex="0">
                 <div class="row g-4">
                     <!-- Lựa chọn loại báo cáo -->
-                    <div class="col-md-8 mb-4">
+                    <div class="col-12 mb-4">
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">Loại báo cáo</h5>
@@ -620,22 +569,6 @@
                         </div>
                     </div>
 
-                    <!-- Quản lý dữ liệu -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">Quản lý dữ liệu</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="d-grid gap-2">
-                                    <button id="export-btn" class="btn btn-outline-primary">Xuất dữ liệu (JSON)</button>
-                                    <button id="import-btn" class="btn btn-outline-secondary">Nhập dữ liệu (JSON)</button>
-                                    <input type="file" id="import-file" accept=".json" class="d-none">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Báo cáo KQKD -->
                     <div class="col-12">
                         <div class="card">
@@ -644,15 +577,15 @@
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
-                                    <table class="table table-striped table-hover">
-                                        <thead id="report-table-head">
+                                    <table class="table table-striped table-hover align-middle">
+                                        <thead id="report-table-head" class="table-dark">
                                             <tr>
-                                                <th>ID</th>
-                                                <th>Tên chuyến</th>
-                                                <th>Ngày</th>
-                                                <th>Tổng chi phí</th>
-                                                <th>Tổng doanh thu</th>
-                                                <th>Lợi nhuận gộp</th>
+                                                <th scope="col" class="text-center" style="width: 80px;">ID</th>
+                                                <th scope="col">Tên chuyến</th>
+                                                <th scope="col" class="text-center" style="width: 110px;">Ngày</th>
+                                                <th scope="col" class="text-end" style="width: 140px;">Tổng chi phí</th>
+                                                <th scope="col" class="text-end" style="width: 140px;">Tổng doanh thu</th>
+                                                <th scope="col" class="text-end" style="width: 140px;">Lợi nhuận gộp</th>
                                             </tr>
                                         </thead>
                                         <tbody id="reports-list">
@@ -662,6 +595,547 @@
                                 </div>
                                 <div id="no-reports-message" class="text-center py-3 text-muted">
                                     Chưa có dữ liệu báo cáo
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Quản trị dữ liệu -->
+            <div class="tab-pane fade" id="admin-tab-pane" role="tabpanel" aria-labelledby="admin-tab" tabindex="0">
+                <div class="row g-4">
+                    <!-- Export/Import JSON -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">📁 Sao lưu & Khôi phục</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-3">Xuất và nhập dữ liệu dưới dạng file JSON để sao lưu hoặc chuyển đổi hệ thống.</p>
+                                
+                                <div class="d-grid gap-2">
+                                    <button id="export-btn" class="btn btn-primary">
+                                        📤 Xuất dữ liệu (JSON)
+                                    </button>
+                                    <button id="import-btn" class="btn btn-outline-secondary">
+                                        📥 Nhập dữ liệu (JSON)
+                                    </button>
+                                    <input type="file" id="import-file" accept=".json" class="d-none">
+                                </div>
+
+                                <div class="mt-3">
+                                    <small class="text-muted">
+                                        <strong>Lưu ý:</strong> Nhập dữ liệu sẽ ghi đè toàn bộ dữ liệu hiện có. 
+                                        Hãy tạo backup trước khi thực hiện.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Auto Backup System -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">🛡️ Auto Backup</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-3">Hệ thống backup tự động bảo vệ dữ liệu 24/7 với khả năng khôi phục nhanh chóng.</p>
+                                
+                                <!-- Trạng thái backup -->
+                                <div class="mb-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="autoBackupEnabled">
+                                        <label class="form-check-label" for="autoBackupEnabled">
+                                            <strong>Tự động backup</strong>
+                                        </label>
+                                    </div>
+                                    <small class="text-muted">Backup dữ liệu tự động theo lịch trình</small>
+                                </div>
+
+                                <!-- Thống kê -->
+                                <div class="mb-3">
+                                    <h6>Thống kê:</h6>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <div class="bg-light p-2 rounded text-center">
+                                                <small class="text-muted">Tổng số</small>
+                                                <div class="fw-bold" id="totalBackups">0</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="bg-light p-2 rounded text-center">
+                                                <small class="text-muted">Lần cuối</small>
+                                                <div class="fw-bold small" id="lastBackup">Chưa có</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Backup thủ công -->
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary btn-sm" id="manualBackupBtn">
+                                        💾 Backup ngay
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" id="viewBackupsBtn">
+                                        📋 Xem danh sách
+                                    </button>
+                                    <button class="btn btn-outline-success btn-sm" id="restoreBackupBtn">
+                                        🔄 Khôi phục
+                                    </button>
+                                </div>
+
+                                <!-- Trạng thái hiện tại -->
+                                <div class="mt-3">
+                                    <div class="alert alert-info py-2 mb-0">
+                                        <small id="backupStatus">⏸️ Auto backup đã tắt</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Database Information -->
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">💾 Thông tin Database</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-3">
+                                        <div class="bg-primary bg-opacity-10 p-3 rounded text-center">
+                                            <h6 class="fw-bold">Khách hàng</h6>
+                                            <div class="h4 mb-0" id="dbStats-customers">0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="bg-success bg-opacity-10 p-3 rounded text-center">
+                                            <h6 class="fw-bold">Đơn hàng</h6>
+                                            <div class="h4 mb-0" id="dbStats-orders">0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="bg-warning bg-opacity-10 p-3 rounded text-center">
+                                            <h6 class="fw-bold">Chuyến hàng</h6>
+                                            <div class="h4 mb-0" id="dbStats-trips">0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="bg-info bg-opacity-10 p-3 rounded text-center">
+                                            <h6 class="fw-bold">Sản phẩm</h6>
+                                            <div class="h4 mb-0" id="dbStats-products">0</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-3">
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <div class="bg-light p-2 rounded">
+                                                <strong>Database:</strong> <span class="text-muted">salesAppDB v3 (IndexedDB)</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="bg-light p-2 rounded">
+                                                <strong>Storage:</strong> <span class="text-muted" id="storageUsage">Đang tính toán...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-3">
+                                    <button class="btn btn-outline-primary btn-sm" id="refreshDbStats">
+                                        🔄 Cập nhật thống kê
+                                    </button>
+                                    <button class="btn btn-outline-warning btn-sm" id="clearCacheBtn">
+                                        🗑️ Xóa cache trình duyệt
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Hướng dẫn sử dụng -->
+            <div class="tab-pane fade" id="guide-tab-pane" role="tabpanel" aria-labelledby="guide-tab" tabindex="0">
+                <div class="row g-4">
+                    <!-- Mục lục -->
+                    <div class="col-md-3">
+                        <div class="card position-sticky" style="top: 20px;">
+                            <div class="card-header">
+                                <h6 class="card-title mb-0">📚 Mục lục</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="list-group list-group-flush">
+                                    <a href="#guide-suppliers" class="list-group-item list-group-item-action">
+                                        1. Tạo nhà cung cấp
+                                    </a>
+                                    <a href="#guide-products" class="list-group-item list-group-item-action">
+                                        2. Tạo sản phẩm
+                                    </a>
+                                    <a href="#guide-customers" class="list-group-item list-group-item-action">
+                                        3. Tạo khách hàng
+                                    </a>
+                                    <a href="#guide-orders" class="list-group-item list-group-item-action">
+                                        4. Tạo đơn hàng
+                                    </a>
+                                    <a href="#guide-trips" class="list-group-item list-group-item-action">
+                                        5. Tạo chuyến hàng
+                                    </a>
+                                    <a href="#guide-link-orders" class="list-group-item list-group-item-action">
+                                        6. Liên kết đơn hàng
+                                    </a>
+                                    <a href="#guide-expenses" class="list-group-item list-group-item-action">
+                                        7. Chi phí chuyến hàng
+                                    </a>
+                                    <a href="#guide-debts" class="list-group-item list-group-item-action">
+                                        8. Quản lý công nợ
+                                    </a>
+                                    <a href="#guide-reports" class="list-group-item list-group-item-action">
+                                        9. Báo cáo KQKD
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Nội dung hướng dẫn -->
+                    <div class="col-md-9">
+                        <!-- Giới thiệu -->
+                        <div class="card mb-4">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="card-title mb-0">🎯 Hướng dẫn sử dụng hệ thống Quản lý bán hàng Gốm Sứ</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="lead">Chào mừng bạn đến với hệ thống quản lý bán hàng gốm sứ! Để sử dụng hiệu quả, vui lòng làm theo thứ tự các bước sau:</p>
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> <strong>Lưu ý:</strong> Hãy thực hiện theo đúng thứ tự từ bước 1 đến 9 để đảm bảo hệ thống hoạt động chính xác.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bước 1: Tạo nhà cung cấp -->
+                        <div class="card mb-4" id="guide-suppliers">
+                            <div class="card-header bg-warning">
+                                <h6 class="card-title mb-0">🏢 Bước 1: Tạo nhà cung cấp</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Mục đích:</strong> Nhà cung cấp là nơi bạn nhập hàng để bán lại cho khách hàng.</p>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6>Cách thực hiện:</h6>
+                                        <ol>
+                                            <li>Vào tab <strong>"Nhà cung cấp"</strong></li>
+                                            <li>Điền thông tin:
+                                                <ul>
+                                                    <li><strong>Tên nhà cung cấp:</strong> Ví dụ "Công ty ABC"</li>
+                                                    <li><strong>Khu vực:</strong> Ví dụ "Hà Nội", "TP.HCM"</li>
+                                                    <li><strong>Địa chỉ:</strong> Địa chỉ cụ thể</li>
+                                                    <li><strong>Số điện thoại:</strong> Số liên lạc</li>
+                                                </ul>
+                                            </li>
+                                            <li>Nhấn <button class="btn btn-primary btn-sm">Lưu nhà cung cấp</button></li>
+                                        </ol>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="alert alert-success">
+                                            <i class="bi bi-lightbulb"></i> <strong>Mẹo:</strong> Tạo nhiều nhà cung cấp để có nhiều lựa chọn hàng hóa!
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bước 2: Tạo sản phẩm -->
+                        <div class="card mb-4" id="guide-products">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="card-title mb-0">📦 Bước 2: Tạo sản phẩm</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Mục đích:</strong> Sản phẩm là những mặt hàng bạn bán cho khách hàng.</p>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6>Cách thực hiện:</h6>
+                                        <ol>
+                                            <li>Vào tab <strong>"Sản phẩm"</strong></li>
+                                            <li>Điền thông tin:
+                                                <ul>
+                                                    <li><strong>Mã sản phẩm:</strong> Ví dụ "SP001" (tùy chọn)</li>
+                                                    <li><strong>Tên sản phẩm:</strong> Ví dụ "Táo Envy"</li>
+                                                    <li><strong>Đơn vị tính:</strong> Ví dụ "kg", "thùng", "cái"</li>
+                                                    <li><strong>Giá nhập:</strong> Giá bạn mua từ nhà cung cấp</li>
+                                                    <li><strong>Nhà cung cấp:</strong> Chọn từ danh sách đã tạo ở bước 1</li>
+                                                </ul>
+                                            </li>
+                                            <li>Nhấn <button class="btn btn-primary btn-sm">Thêm sản phẩm</button></li>
+                                        </ol>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="alert alert-warning">
+                                            <i class="bi bi-exclamation-triangle"></i> <strong>Quan trọng:</strong> Phải tạo nhà cung cấp trước khi tạo sản phẩm!
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bước 3: Tạo khách hàng -->
+                        <div class="card mb-4" id="guide-customers">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="card-title mb-0">👥 Bước 3: Tạo khách hàng</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Mục đích:</strong> Khách hàng là người mua hàng từ bạn.</p>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6>Cách thực hiện:</h6>
+                                        <ol>
+                                            <li>Vào tab <strong>"Khách hàng"</strong></li>
+                                            <li>Điền thông tin:
+                                                <ul>
+                                                    <li><strong>Tên khách hàng:</strong> Ví dụ "Anh Minh", "Chị Lan"</li>
+                                                    <li><strong>Số điện thoại:</strong> Số liên lạc khách hàng</li>
+                                                </ul>
+                                            </li>
+                                            <li>Nhấn <button class="btn btn-primary btn-sm">Lưu khách hàng</button></li>
+                                        </ol>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="alert alert-info">
+                                            <i class="bi bi-person-plus"></i> <strong>Gợi ý:</strong> Có thể tạo khách hàng trong quá trình tạo đơn hàng!
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bước 4: Tạo đơn hàng -->
+                        <div class="card mb-4" id="guide-orders">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="card-title mb-0">📋 Bước 4: Tạo đơn hàng</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Mục đích:</strong> Đơn hàng ghi nhận việc khách hàng đặt mua sản phẩm.</p>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6>Cách thực hiện:</h6>
+                                        <ol>
+                                            <li>Vào tab <strong>"Đơn hàng"</strong></li>
+                                            <li>Chọn <strong>khách hàng</strong> từ dropdown</li>
+                                            <li>Chọn <strong>nhà cung cấp</strong> đầu tiên</li>
+                                            <li>Chọn <strong>sản phẩm</strong> từ nhà cung cấp đó</li>
+                                            <li>Nhập <strong>số lượng</strong> và <strong>giá bán</strong></li>
+                                            <li>Có thể thêm nhiều sản phẩm/nhà cung cấp khác</li>
+                                            <li>Nhấn <button class="btn btn-primary btn-sm">Lưu đơn hàng</button></li>
+                                        </ol>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="alert alert-success">
+                                            <i class="bi bi-calculator"></i> <strong>Tự động:</strong> Hệ thống sẽ tính lợi nhuận dự kiến cho bạn!
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bước 5: Tạo chuyến hàng -->
+                        <div class="card mb-4" id="guide-trips">
+                            <div class="card-header bg-danger text-white">
+                                <h6 class="card-title mb-0">🚚 Bước 5: Tạo chuyến hàng</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Mục đích:</strong> Chuyến hàng là việc vận chuyển và giao hàng cho khách hàng.</p>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6>Cách thực hiện:</h6>
+                                        <ol>
+                                            <li>Vào tab <strong>"Chuyến hàng"</strong></li>
+                                            <li>Điền thông tin:
+                                                <ul>
+                                                    <li><strong>Tên chuyến hàng:</strong> Ví dụ "Chuyến HN 15/3"</li>
+                                                    <li><strong>Ngày đi:</strong> Chọn ngày thực hiện chuyến</li>
+                                                    <li><strong>Điểm đến:</strong> Nơi giao hàng</li>
+                                                    <li><strong>Ghi chú:</strong> Thông tin bổ sung</li>
+                                                </ul>
+                                            </li>
+                                            <li>Nhấn <button class="btn btn-primary btn-sm">Lưu chuyến hàng</button></li>
+                                        </ol>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="alert alert-info">
+                                            <i class="bi bi-info-circle"></i> <strong>Lưu ý:</strong> Tạo chuyến hàng trước, sau đó mới liên kết đơn hàng!
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bước 6: Liên kết đơn hàng với chuyến hàng -->
+                        <div class="card mb-4" id="guide-link-orders">
+                            <div class="card-header bg-secondary text-white">
+                                <h6 class="card-title mb-0">🔗 Bước 6: Liên kết đơn hàng với chuyến hàng</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Mục đích:</strong> Liên kết các đơn hàng có sẵn với chuyến hàng để chuẩn bị giao hàng.</p>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6>Cách thực hiện:</h6>
+                                        <ol>
+                                            <li>Vào tab <strong>"Chuyến hàng"</strong></li>
+                                            <li>Nhấn nút <button class="btn btn-info btn-sm"><i class="bi bi-eye"></i> Chi tiết</button> của chuyến hàng vừa tạo</li>
+                                            <li>Trong modal chi tiết, tìm tab <strong>"Liên kết đơn hàng"</strong></li>
+                                            <li>Hệ thống sẽ hiển thị danh sách đơn hàng có thể liên kết:
+                                                <ul>
+                                                    <li>Chỉ các đơn hàng có trạng thái <span class="badge bg-primary">Mới</span> hoặc <span class="badge bg-warning">Chờ xử lý</span></li>
+                                                    <li>Chưa được liên kết với chuyến hàng nào khác</li>
+                                                </ul>
+                                            </li>
+                                            <li>Tích chọn các đơn hàng muốn đưa vào chuyến này</li>
+                                            <li>Nhấn <button class="btn btn-primary btn-sm">Xác nhận giao hàng & Liên kết với chuyến</button></li>
+                                            <li>Đơn hàng sẽ chuyển thành trạng thái <span class="badge bg-info">Đang xử lý</span></li>
+                                        </ol>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="alert alert-warning">
+                                            <i class="bi bi-exclamation-triangle"></i> <strong>Quan trọng:</strong> Chỉ đơn hàng được liên kết mới được tính vào báo cáo KQKD!
+                                        </div>
+                                        <div class="alert alert-success">
+                                            <i class="bi bi-check-circle"></i> <strong>Tự động:</strong> Sau khi liên kết, có thể ghi nhận thanh toán từ khách hàng!
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bước 7: Thêm chi phí chuyến hàng -->
+                        <div class="card mb-4" id="guide-expenses">
+                            <div class="card-header bg-warning">
+                                <h6 class="card-title mb-0">💰 Bước 7: Thêm chi phí chuyến hàng</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Mục đích:</strong> Ghi nhận các chi phí phát sinh trong chuyến hàng (xăng, phí đường, ăn uống...).</p>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6>Cách thực hiện:</h6>
+                                        <ol>
+                                            <li>Trong modal chi tiết chuyến hàng (từ bước 6)</li>
+                                            <li>Tìm phần <strong>"Thêm chi phí"</strong></li>
+                                            <li>Điền thông tin:
+                                                <ul>
+                                                    <li><strong>Loại chi phí:</strong> Ví dụ "Xăng xe", "Phí đường"</li>
+                                                    <li><strong>Số tiền:</strong> Số tiền thực tế chi ra</li>
+                                                    <li><strong>Ghi chú:</strong> Mô tả chi tiết</li>
+                                                </ul>
+                                            </li>
+                                            <li>Nhấn <button class="btn btn-warning btn-sm">Thêm chi phí</button></li>
+                                        </ol>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="alert alert-success">
+                                            <i class="bi bi-graph-up"></i> <strong>Lợi ích:</strong> Chi phí sẽ được tính vào báo cáo lợi nhuận!
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bước 8: Quản lý công nợ -->
+                        <div class="card mb-4" id="guide-debts">
+                            <div class="card-header bg-danger text-white">
+                                <h6 class="card-title mb-0">💳 Bước 8: Quản lý công nợ</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Mục đích:</strong> Theo dõi và quản lý khoản nợ của khách hàng.</p>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6>Cách sử dụng:</h6>
+                                        <ol>
+                                            <li>Vào tab <strong>"Công nợ"</strong></li>
+                                            <li>Xem tổng quan:
+                                                <ul>
+                                                    <li><strong>Tổng công nợ:</strong> Tổng tiền khách chưa thanh toán</li>
+                                                    <li><strong>Số khách đang nợ:</strong> Số lượng khách hàng có nợ</li>
+                                                </ul>
+                                            </li>
+                                            <li>Nhấn <button class="btn btn-primary btn-sm"><i class="bi bi-eye"></i> Chi tiết</button> để xem chi tiết nợ của từng khách</li>
+                                            <li>Trong modal chi tiết, có thể ghi nhận thanh toán</li>
+                                        </ol>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="alert alert-warning">
+                                            <i class="bi bi-exclamation-triangle"></i> <strong>Tự động:</strong> Công nợ được tính từ đơn hàng đã giao!
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bước 9: Xem báo cáo KQKD -->
+                        <div class="card mb-4" id="guide-reports">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="card-title mb-0">📊 Bước 9: Xem báo cáo KQKD</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>Mục đích:</strong> Theo dõi kết quả kinh doanh và lợi nhuận.</p>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6>Cách sử dụng:</h6>
+                                        <ol>
+                                            <li>Vào tab <strong>"Báo cáo"</strong></li>
+                                            <li>Chọn loại báo cáo:
+                                                <ul>
+                                                    <li><strong>Theo chuyến hàng:</strong> Xem từng chuyến</li>
+                                                    <li><strong>Theo tháng:</strong> Tổng hợp theo tháng</li>
+                                                    <li><strong>Theo năm:</strong> Tổng hợp theo năm</li>
+                                                </ul>
+                                            </li>
+                                            <li>Xem các chỉ số:
+                                                <ul>
+                                                    <li><strong>Tổng chi phí:</strong> Chi phí mua hàng + chi phí chuyến</li>
+                                                    <li><strong>Tổng doanh thu:</strong> Tiền bán hàng</li>
+                                                    <li><strong>Lợi nhuận gộp:</strong> Doanh thu - Chi phí</li>
+                                                </ul>
+                                            </li>
+                                        </ol>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="alert alert-info">
+                                            <i class="bi bi-bar-chart"></i> <strong>Thông minh:</strong> Báo cáo tự động cập nhật theo dữ liệu thực tế!
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tổng kết -->
+                        <div class="card">
+                            <div class="card-header bg-dark text-white">
+                                <h6 class="card-title mb-0">🎉 Hoàn thành!</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-success">
+                                    <h6><i class="bi bi-check-circle"></i> Chúc mừng!</h6>
+                                    <p class="mb-0">Bạn đã hoàn thành hướng dẫn cơ bản. Hệ thống đã sẵn sàng để bạn quản lý bán hàng gốm sứ hiệu quả!</p>
+                                </div>
+                                
+                                <h6>Lưu ý quan trọng:</h6>
+                                <ul>
+                                    <li>Dữ liệu được lưu trên trình duyệt của bạn</li>
+                                    <li>Hãy thường xuyên backup dữ liệu ở tab "Quản trị dữ liệu"</li>
+                                    <li>Báo cáo chỉ chính xác khi bạn nhập đầy đủ thông tin</li>
+                                    <li>Có thể chỉnh sửa/xóa dữ liệu bằng các nút thao tác</li>
+                                </ul>
+
+                                <div class="mt-3">
+                                    <a href="#customers-tab" class="btn btn-primary me-2" onclick="document.getElementById('customers-tab').click()">
+                                        🚀 Bắt đầu sử dụng
+                                    </a>
+                                    <a href="#admin-tab" class="btn btn-outline-secondary" onclick="document.getElementById('admin-tab').click()">
+                                        💾 Quản trị dữ liệu
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -725,5 +1199,17 @@
     <script src="payment.js"></script>
     <script src="debt.js"></script>
     <script src="report.js"></script>
+    
+    <!-- Debug và test scripts -->
+         <!-- <script src="test_bug_fixes.js"></script>
+     <script src="debug_dropdown.js"></script>
+     <script src="quick_fixes.js"></script>
+     <script src="test_new_trip_workflow.js"></script> -->
+     
+     <!-- Table standardization -->
+     <!-- <script src="table_standardization.js"></script> -->
+     
+     <!-- Auto Backup System -->
+     <script src="auto_backup_system.js"></script>
 </body>
 </html>

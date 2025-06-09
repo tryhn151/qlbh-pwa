@@ -1,17 +1,23 @@
 {
-  "name": "Quản Lý Bán Hàng",
-  "short_name": "QLBH",
-  "description": "Ứng dụng quản lý bán hàng cá nhân",
+  "name": "Quản Lý Bán Hàng - Gốm Sứ",
+  "short_name": "Ceramics",
+  "description": "Ứng dụng quản lý bán hàng gốm sứ",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#007bff",
+  "theme_color": "#6c5ce7",
   "orientation": "any",
   "icons": [
     {
-      "src": "icons/icons8-trade-96.png",
-      "sizes": "96x96",
-      "type": "image/png",
+      "src": "icons/ceramics-logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/ceramics-logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     }
   ]

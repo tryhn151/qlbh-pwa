@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test IndexedDB</title>
+</head>
+<body>
+    <h1>Test IndexedDB</h1>
+    <button id="test-btn">Test Database</button>
+    <div id="output"></div>
+
+    <!-- Thư viện idb -->
+    <script src="https://cdn.jsdelivr.net/npm/idb@8.0.0/build/umd.js"></script>
+    
+    <script>
+        document.getElementById('test-btn').addEventListener('click', async () => {
+            const output = document.getElementById('output');
+            output.innerHTML = '<p>Đang test...</p>';
+            
+            try {
+                console.log('Bắt đầu test IndexedDB...');
+                
+                // Kiểm tra thư viện idb
+                if (typeof idb === 'undefined') {
+                    throw new Error('Thư viện idb chưa được tải');
+                }
+                
+                console.log('Thư viện idb đã sẵn sàng');
+                
+                // Mở database với version 3
+                const db = await idb.openDB('testDB', 3, {
+                    upgrade(db, oldVersion, newVersion, transaction) {
+                        console.log(`Upgrade từ ${oldVersion} lên ${newVersion}`);
+                        
+                        if (oldVersion < 1) {
+                            const customerStore = db.createObjectStore('customers', {
+                                keyPath: 'id',
+                                autoIncrement: true
+                            });
+                        }
+                        
+                        if (oldVersion < 2) {
+                            const orderStore = db.createObjectStore('orders', {
+                                keyPath: 'id', 
+                                autoIncrement: true
+                            });
+                            orderStore.createIndex('customerId', 'customerId');
+                        }
+                        
+                        if (oldVersion < 3) {
+                            if (db.objectStoreNames.contains('orders')) {
+                                const orderStore = transaction.objectStore('orders');
+                                if (!orderStore.indexNames.contains('paymentStatus')) {
+                                    orderStore.createIndex('paymentStatus', 'paymentStatus');
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                console.log('Database đã được tạo thành công');
+                
+                // Test transaction
+                const tx = db.transaction('customers', 'readonly');
+                tx.abort();
+                
+                console.log('Test transaction thành công');
+                
+                output.innerHTML = '<p style="color: green;">✅ Test thành công! IndexedDB hoạt động bình thường.</p>';
+                
+            } catch (error) {
+                console.error('Lỗi test:', error);
+                output.innerHTML = `<p style="color: red;">❌ Test thất bại: ${error.message}</p>`;
+            }
+        });
+    </script>
+</body>
+</html> 

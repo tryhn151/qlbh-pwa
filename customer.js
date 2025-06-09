@@ -213,16 +213,18 @@ async function searchCustomers(keyword) {
             filteredCustomers.forEach(customer => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${customer.id}</td>
-                    <td>${customer.name}</td>
-                    <td>${customer.contact || ''}</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary edit-customer-btn" data-id="${customer.id}">
-                            Sửa
-                        </button>
-                        <button class="btn btn-sm btn-danger delete-customer-btn" data-id="${customer.id}">
-                            Xóa
-                        </button>
+                    <td class="text-center"><strong>${customer.id}</strong></td>
+                    <td><strong>${customer.name}</strong></td>
+                    <td>${customer.contact || '<em class="text-muted">Chưa có</em>'}</td>
+                    <td class="text-center">
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary edit-customer-btn" data-id="${customer.id}">
+                                <i class="bi bi-pencil"></i> Sửa
+                            </button>
+                            <button class="btn btn-outline-danger delete-customer-btn" data-id="${customer.id}">
+                                <i class="bi bi-trash"></i> Xóa
+                            </button>
+                        </div>
                     </td>
                 `;
                 
@@ -350,16 +352,18 @@ async function displayCustomers() {
             customers.forEach(customer => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${customer.id}</td>
-                    <td>${customer.name}</td>
-                    <td>${customer.contact || ''}</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary edit-customer-btn" data-id="${customer.id}">
-                            Sửa
-                        </button>
-                        <button class="btn btn-sm btn-danger delete-customer-btn" data-id="${customer.id}">
-                            Xóa
-                        </button>
+                    <td class="text-center"><strong>${customer.id}</strong></td>
+                    <td><strong>${customer.name}</strong></td>
+                    <td>${customer.contact || '<em class="text-muted">Chưa có</em>'}</td>
+                    <td class="text-center">
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary edit-customer-btn" data-id="${customer.id}">
+                                <i class="bi bi-pencil"></i> Sửa
+                            </button>
+                            <button class="btn btn-outline-danger delete-customer-btn" data-id="${customer.id}">
+                                <i class="bi bi-trash"></i> Xóa
+                            </button>
+                        </div>
                     </td>
                 `;
                 
@@ -729,6 +733,9 @@ window.loadCustomerModule = async function() {
         
         // Đổ danh sách khách hàng vào dropdown
         await populateCustomerDropdowns();
+        
+        // Đăng ký hàm populate làm global
+        window.populateCustomerDropdowns = populateCustomerDropdowns;
         
         console.log('Module khách hàng đã khởi tạo thành công');
         return true;

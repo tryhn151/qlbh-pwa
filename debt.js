@@ -1,22 +1,15 @@
 // ===== CÁC HÀM XỬ LÝ CHO QUẢN LÝ CÔNG NỢ =====
 
-// Tính toán công nợ của tất cả khách hàng
+// Tính toán công nợ của tất cả khách hàng (chuẩn hóa với trip logic)
 async function calculateAllCustomerDebts() {
     try {
-        // Lấy tất cả khách hàng
-        const customerTx = db.transaction('customers', 'readonly');
-        const customerStore = customerTx.objectStore('customers');
+        // Lấy tất cả khách hàng và đơn hàng
+        const tx = db.transaction(['customers', 'orders'], 'readonly');
+        const customerStore = tx.objectStore('customers');
+        const orderStore = tx.objectStore('orders');
+        
         const customers = await customerStore.getAll();
-        
-        // Lấy tất cả đơn hàng
-        const orderTx = db.transaction('orders', 'readonly');
-        const orderStore = orderTx.objectStore('orders');
         const orders = await orderStore.getAll();
-        
-        // Lấy tất cả thanh toán
-        const paymentTx = db.transaction('customerPayments', 'readonly');
-        const paymentStore = paymentTx.objectStore('customerPayments');
-        const payments = await paymentStore.getAll();
         
         // Tính toán công nợ cho từng khách hàng
         const customerDebts = [];
@@ -25,45 +18,54 @@ async function calculateAllCustomerDebts() {
             // Lọc đơn hàng của khách hàng
             const customerOrders = orders.filter(order => order.customerId === customer.id);
             
-            // Tính tổng giá trị đơn hàng
             let totalOrderValue = 0;
+            let totalPaymentReceived = 0;
             let unpaidOrderCount = 0;
-            let overdueAmount = 0;
+
+            const debtOrders = []; // Chi tiết đơn hàng còn nợ
             
             for (const order of customerOrders) {
                 // Tính giá trị đơn hàng
                 if (order.items && Array.isArray(order.items)) {
                     const orderValue = order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
+                    const paymentReceived = order.paymentReceived || 0;
+                    const remainingDebt = orderValue - paymentReceived;
                     
-                    // Kiểm tra trạng thái thanh toán
-                    if (!order.paymentStatus || order.paymentStatus !== 'Đã thanh toán đủ') {
+                    // Chỉ tính các đơn hàng còn nợ
+                    if (remainingDebt > 0) {
                         totalOrderValue += orderValue;
+                        totalPaymentReceived += paymentReceived;
                         unpaidOrderCount++;
                         
-                        // Kiểm tra quá hạn
-                        if (order.dueDate && new Date(order.dueDate) < new Date()) {
-                            overdueAmount += orderValue;
-                        }
+
+                        
+                        // Thêm thông tin chi tiết đơn hàng
+                        debtOrders.push({
+                            orderId: order.id,
+                            orderDate: order.orderDate,
+                            orderValue,
+                            paymentReceived,
+                            remainingDebt,
+                            tripId: order.deliveredTripId,
+                            status: order.status,
+                            dueDate: order.dueDate
+                        });
                     }
                 }
             }
             
-            // Lọc thanh toán của khách hàng
-            const customerPayments = payments.filter(payment => payment.customerId === customer.id);
+            // Tính công nợ còn lại tổng cộng
+            const totalRemainingDebt = totalOrderValue - totalPaymentReceived;
             
-            // Tính tổng thanh toán
-            const totalPayment = customerPayments.reduce((sum, payment) => sum + payment.amount, 0);
-            
-            // Tính công nợ còn lại
-            const remainingDebt = totalOrderValue - totalPayment;
-            
-            if (remainingDebt > 0) {
+            if (totalRemainingDebt > 0) {
                 customerDebts.push({
                     customerId: customer.id,
                     customerName: customer.name,
                     unpaidOrderCount,
-                    totalDebt: remainingDebt,
-                    overdueAmount
+                    totalOrderValue,
+                    totalPaymentReceived,
+                    totalDebt: totalRemainingDebt,
+                    debtOrders // Thêm chi tiết đơn hàng
                 });
             }
         }
@@ -82,7 +84,7 @@ async function displayCustomerDebts() {
         const noDebtsMessage = document.getElementById('no-debts-message');
         const totalDebtAmount = document.getElementById('total-debt-amount');
         const totalDebtors = document.getElementById('total-debtors');
-        const overdueDebtAmount = document.getElementById('overdue-debt-amount');
+
         
         if (!customerDebtsList || !noDebtsMessage) return;
         
@@ -98,28 +100,24 @@ async function displayCustomerDebts() {
             
             // Tính tổng công nợ và số khách hàng đang nợ
             const totalDebt = customerDebts.reduce((sum, debt) => sum + debt.totalDebt, 0);
-            const totalOverdue = customerDebts.reduce((sum, debt) => sum + debt.overdueAmount, 0);
             
             // Cập nhật tổng quan
             totalDebtAmount.textContent = formatCurrency(totalDebt);
             totalDebtors.textContent = customerDebts.length;
-            overdueDebtAmount.textContent = formatCurrency(totalOverdue);
             
             // Hiển thị từng khách hàng
             customerDebts.forEach(debt => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${debt.customerId}</td>
-                    <td>${debt.customerName}</td>
-                    <td class="text-center">${debt.unpaidOrderCount}</td>
-                    <td class="text-end">${formatCurrency(debt.totalDebt)}</td>
-                    <td class="text-end ${debt.overdueAmount > 0 ? 'text-danger' : ''}">${formatCurrency(debt.overdueAmount)}</td>
-                    <td>
+                    <td class="text-center"><strong>${debt.customerId}</strong></td>
+                    <td><strong>${debt.customerName}</strong></td>
+                    <td class="text-center"><span class="badge bg-secondary">${debt.unpaidOrderCount}</span></td>
+                    <td class="text-end"><strong>${formatCurrency(debt.totalOrderValue)}</strong></td>
+                    <td class="text-end text-success"><strong>${formatCurrency(debt.totalPaymentReceived)}</strong></td>
+                    <td class="text-end text-danger"><strong>${formatCurrency(debt.totalDebt)}</strong></td>
+                    <td class="text-center">
                         <button class="btn btn-sm btn-primary view-customer-debt-btn" data-id="${debt.customerId}">
-                            Chi tiết
-                        </button>
-                        <button class="btn btn-sm btn-success add-payment-btn" data-id="${debt.customerId}" data-name="${debt.customerName}">
-                            Thanh toán
+                            <i class="bi bi-eye"></i> Chi tiết
                         </button>
                     </td>
                 `;
@@ -127,30 +125,11 @@ async function displayCustomerDebts() {
                 customerDebtsList.appendChild(row);
             });
             
-            // Thêm event listener cho các nút
+            // Thêm event listener cho nút chi tiết
             document.querySelectorAll('.view-customer-debt-btn').forEach(button => {
                 button.addEventListener('click', async (e) => {
                     const customerId = parseInt(e.target.getAttribute('data-id'));
                     await showCustomerDebtDetail(customerId);
-                });
-            });
-            
-            document.querySelectorAll('.add-payment-btn').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const customerId = parseInt(e.target.getAttribute('data-id'));
-                    const customerName = e.target.getAttribute('data-name');
-                    
-                    // Chuyển đến tab thanh toán và điền thông tin khách hàng
-                    document.getElementById('payments-tab').click();
-                    
-                    // Điền thông tin khách hàng vào form thanh toán
-                    const customerSelect = document.getElementById('payment-customer');
-                    if (customerSelect) {
-                        customerSelect.value = customerId;
-                        
-                        // Kích hoạt sự kiện change để cập nhật thông tin công nợ
-                        customerSelect.dispatchEvent(new Event('change'));
-                    }
                 });
             });
         } else {
@@ -160,128 +139,221 @@ async function displayCustomerDebts() {
             // Đặt tổng quan về 0
             totalDebtAmount.textContent = formatCurrency(0);
             totalDebtors.textContent = '0';
-            overdueDebtAmount.textContent = formatCurrency(0);
         }
     } catch (error) {
         console.error('Lỗi khi hiển thị công nợ:', error);
     }
 }
 
-// Hiển thị chi tiết công nợ của một khách hàng
+// Hiển thị chi tiết công nợ của một khách hàng (cải thiện)
 async function showCustomerDebtDetail(customerId) {
     try {
-        // Lấy thông tin khách hàng
-        const customerTx = db.transaction('customers', 'readonly');
-        const customerStore = customerTx.objectStore('customers');
-        const customer = await customerStore.get(customerId);
+        // Lấy thông tin khách hàng và đơn hàng
+        const tx = db.transaction(['customers', 'orders'], 'readonly');
+        const customerStore = tx.objectStore('customers');
+        const orderStore = tx.objectStore('orders');
         
+        const customer = await customerStore.get(customerId);
         if (!customer) {
             alert('Không tìm thấy thông tin khách hàng!');
             return;
         }
         
-        // Lấy đơn hàng của khách hàng
-        const orderTx = db.transaction('orders', 'readonly');
-        const orderStore = orderTx.objectStore('orders');
         const orders = await orderStore.getAll();
         const customerOrders = orders.filter(order => order.customerId === customerId);
         
-        // Lấy thanh toán của khách hàng
-        const paymentTx = db.transaction('customerPayments', 'readonly');
-        const paymentStore = paymentTx.objectStore('customerPayments');
-        const paymentIndex = paymentStore.index('customerId');
-        const customerPayments = await paymentIndex.getAll(customerId);
-        
-        // Tính tổng giá trị đơn hàng và tổng thanh toán
+        // Tính toán chi tiết công nợ
         let totalOrderValue = 0;
-        const unpaidOrders = [];
+        let totalPaymentReceived = 0;
+        const debtOrders = [];
+        const tripDebts = {}; // Nhóm theo chuyến hàng
         
         for (const order of customerOrders) {
-            // Tính giá trị đơn hàng
             if (order.items && Array.isArray(order.items)) {
                 const orderValue = order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
+                const paymentReceived = order.paymentReceived || 0;
+                const remainingDebt = orderValue - paymentReceived;
                 
-                // Kiểm tra trạng thái thanh toán
-                if (!order.paymentStatus || order.paymentStatus !== 'Đã thanh toán đủ') {
+                // Chỉ hiển thị đơn hàng còn nợ
+                if (remainingDebt > 0) {
                     totalOrderValue += orderValue;
+                    totalPaymentReceived += paymentReceived;
                     
-                    unpaidOrders.push({
+                    const isOverdue = order.dueDate && new Date(order.dueDate) < new Date();
+                    const tripId = order.deliveredTripId;
+                    
+                    const orderDebt = {
                         ...order,
                         orderValue,
-                        isOverdue: order.dueDate && new Date(order.dueDate) < new Date()
-                    });
+                        paymentReceived,
+                        remainingDebt,
+                        isOverdue,
+                        tripId
+                    };
+                    
+                    debtOrders.push(orderDebt);
+                    
+                    // Nhóm theo chuyến hàng
+                    if (tripId) {
+                        if (!tripDebts[tripId]) {
+                            tripDebts[tripId] = {
+                                tripId,
+                                orders: [],
+                                totalDebt: 0,
+                                overdueDebt: 0
+                            };
+                        }
+                        tripDebts[tripId].orders.push(orderDebt);
+                        tripDebts[tripId].totalDebt += remainingDebt;
+                        if (isOverdue) {
+                            tripDebts[tripId].overdueDebt += remainingDebt;
+                        }
+                    }
                 }
             }
         }
         
-        // Tính tổng thanh toán
-        const totalPayment = customerPayments.reduce((sum, payment) => sum + payment.amount, 0);
+        // Tính công nợ còn lại tổng cộng
+        const totalRemainingDebt = totalOrderValue - totalPaymentReceived;
+        const totalOverdue = debtOrders.filter(order => order.isOverdue).reduce((sum, order) => sum + order.remainingDebt, 0);
         
-        // Tính công nợ còn lại
-        const remainingDebt = totalOrderValue - totalPayment;
-        
-        // Tạo modal hiển thị chi tiết
+        // Tạo modal hiển thị chi tiết (cải thiện)
         const modalHtml = `
             <div class="modal fade" id="customerDebtModal" tabindex="-1" aria-labelledby="customerDebtModalLabel" aria-hidden="true">
-                <div class="modal-dialog modal-lg">
+                <div class="modal-dialog modal-xl">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h5 class="modal-title" id="customerDebtModalLabel">Chi tiết công nợ - ${customer.name}</h5>
+                            <h5 class="modal-title" id="customerDebtModalLabel">Chi tiết công nợ - ${customer.name} (ID: ${customer.id})</h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
+                            <!-- Tổng quan công nợ -->
                             <div class="row mb-4">
-                                <div class="col-md-4">
-                                    <div class="card bg-light">
+                                <div class="col-md-3">
+                                    <div class="card bg-danger text-white">
                                         <div class="card-body text-center">
-                                            <h6 class="card-title">Tổng nợ</h6>
-                                            <p class="card-text fs-4 text-danger">${formatCurrency(remainingDebt)}</p>
+                                            <h6 class="card-title">Tổng công nợ</h6>
+                                            <p class="card-text fs-4">${formatCurrency(totalRemainingDebt)}</p>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <div class="card bg-light">
+                                <div class="col-md-3">
+                                    <div class="card bg-warning text-dark">
+                                        <div class="card-body text-center">
+                                            <h6 class="card-title">Nợ quá hạn</h6>
+                                            <p class="card-text fs-4">${formatCurrency(totalOverdue)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card bg-success text-white">
                                         <div class="card-body text-center">
                                             <h6 class="card-title">Đã thanh toán</h6>
-                                            <p class="card-text fs-4 text-success">${formatCurrency(totalPayment)}</p>
+                                            <p class="card-text fs-4">${formatCurrency(totalPaymentReceived)}</p>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <div class="card bg-light">
+                                <div class="col-md-3">
+                                    <div class="card bg-info text-white">
                                         <div class="card-body text-center">
-                                            <h6 class="card-title">Số đơn chưa thanh toán</h6>
-                                            <p class="card-text fs-4">${unpaidOrders.length}</p>
+                                            <h6 class="card-title">Số đơn còn nợ</h6>
+                                            <p class="card-text fs-4">${debtOrders.length}</p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                             
-                            <h6 class="mb-3">Đơn hàng chưa thanh toán đủ</h6>
-                            ${unpaidOrders.length > 0 ? `
+                            <!-- Công nợ theo chuyến hàng -->
+                            ${Object.keys(tripDebts).length > 0 ? `
+                                <h6 class="mb-3">Công nợ theo chuyến hàng</h6>
+                                <div class="accordion mb-4" id="tripDebtAccordion">
+                                    ${Object.values(tripDebts).map((trip, index) => `
+                                        <div class="accordion-item">
+                                            <h2 class="accordion-header" id="trip-${trip.tripId}">
+                                                <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-trip-${trip.tripId}" aria-expanded="${index === 0 ? 'true' : 'false'}" aria-controls="collapse-trip-${trip.tripId}">
+                                                    <strong>Chuyến ${trip.tripId}</strong>
+                                                    <span class="ms-3 badge bg-danger">${formatCurrency(trip.totalDebt)}</span>
+                                                    ${trip.overdueDebt > 0 ? `<span class="ms-2 badge bg-warning">Quá hạn: ${formatCurrency(trip.overdueDebt)}</span>` : ''}
+                                                    <span class="ms-2 text-muted">(${trip.orders.length} đơn hàng)</span>
+                                                </button>
+                                            </h2>
+                                            <div id="collapse-trip-${trip.tripId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="trip-${trip.tripId}" data-bs-parent="#tripDebtAccordion">
+                                                <div class="accordion-body">
+                                                    <div class="table-responsive">
+                                                        <table class="table table-striped table-hover align-middle">
+                                                            <thead class="table-dark">
+                                                                <tr>
+                                                                    <th scope="col" class="text-center" style="width: 100px;">Đơn hàng</th>
+                                                                    <th scope="col" class="text-center" style="width: 110px;">Ngày đặt</th>
+                                                                    <th scope="col" class="text-end" style="width: 120px;">Giá trị</th>
+                                                                    <th scope="col" class="text-end" style="width: 120px;">Đã thanh toán</th>
+                                                                    <th scope="col" class="text-end" style="width: 120px;">Còn nợ</th>
+                                                                    <th scope="col" class="text-center" style="width: 130px;">Hạn thanh toán</th>
+                                                                    <th scope="col" class="text-center" style="width: 80px;">Thao tác</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                ${trip.orders.map(order => `
+                                                                    <tr class="${order.isOverdue ? 'table-danger' : ''}">
+                                                                        <td class="text-center">
+                                                                            <strong>${order.id}</strong>
+                                                                            ${order.isOverdue ? '<div><span class="badge bg-danger">Quá hạn</span></div>' : ''}
+                                                                        </td>
+                                                                        <td class="text-center">${formatDate(order.orderDate)}</td>
+                                                                        <td class="text-end"><strong>${formatCurrency(order.orderValue)}</strong></td>
+                                                                        <td class="text-end text-success"><strong>${formatCurrency(order.paymentReceived)}</strong></td>
+                                                                        <td class="text-end text-danger"><strong>${formatCurrency(order.remainingDebt)}</strong></td>
+                                                                        <td class="text-center">${order.dueDate ? formatDate(order.dueDate) : '<em class="text-muted">Không có</em>'}</td>
+                                                                        <td class="text-center">
+                                                                            <button class="btn btn-sm btn-primary view-order-btn" data-id="${order.id}">
+                                                                                <i class="bi bi-eye"></i> Xem
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                `).join('')}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                            
+                            <!-- Tất cả đơn hàng còn nợ -->
+                            <h6 class="mb-3">Tất cả đơn hàng còn nợ (${debtOrders.length} đơn)</h6>
+                            ${debtOrders.length > 0 ? `
                                 <div class="table-responsive">
-                                    <table class="table table-sm table-striped">
-                                        <thead>
+                                    <table class="table table-striped table-hover align-middle">
+                                        <thead class="table-dark">
                                             <tr>
-                                                <th>ID</th>
-                                                <th>Ngày đặt</th>
-                                                <th>Giá trị</th>
-                                                <th>Hạn thanh toán</th>
-                                                <th>Trạng thái</th>
-                                                <th>Thao tác</th>
+                                                <th scope="col" class="text-center" style="width: 100px;">Đơn hàng</th>
+                                                <th scope="col" class="text-center" style="width: 110px;">Ngày đặt</th>
+                                                <th scope="col" class="text-center" style="width: 90px;">Chuyến</th>
+                                                <th scope="col" class="text-end" style="width: 120px;">Giá trị</th>
+                                                <th scope="col" class="text-end" style="width: 120px;">Đã thanh toán</th>
+                                                <th scope="col" class="text-end" style="width: 120px;">Còn nợ</th>
+                                                <th scope="col" class="text-center" style="width: 130px;">Hạn thanh toán</th>
+                                                <th scope="col" class="text-center" style="width: 80px;">Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            ${unpaidOrders.map(order => `
+                                            ${debtOrders.map(order => `
                                                 <tr class="${order.isOverdue ? 'table-danger' : ''}">
-                                                    <td>${order.id}</td>
-                                                    <td>${formatDate(order.orderDate)}</td>
-                                                    <td class="text-end">${formatCurrency(order.orderValue)}</td>
-                                                    <td>${order.dueDate ? formatDate(order.dueDate) : 'Không có'}</td>
-                                                    <td>${order.paymentStatus || 'Chưa thanh toán'}</td>
-                                                    <td>
+                                                    <td class="text-center">
+                                                        <strong>${order.id}</strong>
+                                                        ${order.isOverdue ? '<div><span class="badge bg-danger">Quá hạn</span></div>' : ''}
+                                                    </td>
+                                                    <td class="text-center">${formatDate(order.orderDate)}</td>
+                                                    <td class="text-center">${order.tripId ? `<span class="badge bg-info">T.${order.tripId}</span>` : '<em class="text-muted">Chưa giao</em>'}</td>
+                                                    <td class="text-end"><strong>${formatCurrency(order.orderValue)}</strong></td>
+                                                    <td class="text-end text-success"><strong>${formatCurrency(order.paymentReceived)}</strong></td>
+                                                    <td class="text-end text-danger"><strong>${formatCurrency(order.remainingDebt)}</strong></td>
+                                                    <td class="text-center">${order.dueDate ? formatDate(order.dueDate) : '<em class="text-muted">Không có</em>'}</td>
+                                                    <td class="text-center">
                                                         <button class="btn btn-sm btn-primary view-order-btn" data-id="${order.id}">
-                                                            Xem
+                                                            <i class="bi bi-eye"></i> Xem
                                                         </button>
                                                     </td>
                                                 </tr>
@@ -289,44 +361,26 @@ async function showCustomerDebtDetail(customerId) {
                                         </tbody>
                                     </table>
                                 </div>
-                            ` : '<div class="alert alert-info">Không có đơn hàng nào chưa thanh toán.</div>'}
+                            ` : '<div class="alert alert-info">Không có đơn hàng nào còn nợ.</div>'}
                             
-                            <h6 class="mb-3 mt-4">Lịch sử thanh toán</h6>
-                            ${customerPayments.length > 0 ? `
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-striped">
-                                        <thead>
-                                            <tr>
-                                                <th>ID</th>
-                                                <th>Ngày thanh toán</th>
-                                                <th>Số tiền</th>
-                                                <th>Ghi chú</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${customerPayments.map(payment => `
-                                                <tr>
-                                                    <td>${payment.id}</td>
-                                                    <td>${formatDate(payment.paymentDate)}</td>
-                                                    <td class="text-end">${formatCurrency(payment.amount)}</td>
-                                                    <td>${payment.note || ''}</td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                        <tfoot>
-                                            <tr>
-                                                <th colspan="2" class="text-end">Tổng cộng:</th>
-                                                <th class="text-end">${formatCurrency(totalPayment)}</th>
-                                                <th></th>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
+                            <!-- Thông tin khuyến nghị -->
+                            ${totalRemainingDebt > 0 ? `
+                                <div class="alert alert-info">
+                                    <h6><i class="bi bi-info-circle"></i> Thông tin</h6>
+                                    <ul class="mb-0">
+                                        <li>Khách hàng này còn nợ tổng cộng <strong>${formatCurrency(totalRemainingDebt)}</strong></li>
+                                        ${totalOverdue > 0 ? `<li class="text-danger">Có <strong>${formatCurrency(totalOverdue)}</strong> đã quá hạn thanh toán</li>` : ''}
+                                        <li>Thanh toán được quản lý trực tiếp trong phần <strong>Chuyến hàng</strong></li>
+                                        <li>Nhấn "Xem" để xem chi tiết từng đơn hàng</li>
+                                    </ul>
                                 </div>
-                            ` : '<div class="alert alert-info">Chưa có lịch sử thanh toán.</div>'}
+                            ` : ''}
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                            <button type="button" class="btn btn-success" id="add-payment-modal-btn">Thêm thanh toán</button>
+                            ${totalRemainingDebt > 0 ? `
+                                <button type="button" class="btn btn-primary" id="goto-trips-btn">Đi đến chuyến hàng</button>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -342,23 +396,21 @@ async function showCustomerDebtDetail(customerId) {
         const modal = new bootstrap.Modal(document.getElementById('customerDebtModal'));
         modal.show();
         
-        // Xử lý sự kiện nút thêm thanh toán
-        document.getElementById('add-payment-modal-btn').addEventListener('click', () => {
-            // Đóng modal
-            modal.hide();
-            
-            // Chuyển đến tab thanh toán và điền thông tin khách hàng
-            document.getElementById('payments-tab').click();
-            
-            // Điền thông tin khách hàng vào form thanh toán
-            const customerSelect = document.getElementById('payment-customer');
-            if (customerSelect) {
-                customerSelect.value = customerId;
+        // Xử lý sự kiện nút đi đến chuyến hàng
+        if (totalRemainingDebt > 0) {
+            document.getElementById('goto-trips-btn').addEventListener('click', () => {
+                // Đóng modal
+                modal.hide();
                 
-                // Kích hoạt sự kiện change để cập nhật thông tin công nợ
-                customerSelect.dispatchEvent(new Event('change'));
-            }
-        });
+                // Chuyển đến tab chuyến hàng
+                document.getElementById('trips-tab').click();
+                
+                // Hiển thị thông báo
+                setTimeout(() => {
+                    alert(`Bạn có thể quản lý thanh toán cho khách hàng ${customer.name} trong phần "Đơn hàng liên kết" của từng chuyến hàng.`);
+                }, 500);
+            });
+        }
         
         // Xử lý sự kiện nút xem đơn hàng
         document.querySelectorAll('.view-order-btn').forEach(button => {
@@ -368,8 +420,17 @@ async function showCustomerDebtDetail(customerId) {
                 // Đóng modal
                 modal.hide();
                 
-                // Hiển thị chi tiết đơn hàng
-                await showOrderDetail(orderId);
+                // Hiển thị chi tiết đơn hàng (sử dụng window.showOrderDetail an toàn)
+                try {
+                    if (typeof window.showOrderDetail === 'function') {
+                        await window.showOrderDetail(orderId);
+                    } else {
+                        alert('Chức năng xem chi tiết đơn hàng chưa sẵn sàng. Vui lòng thử lại sau.');
+                    }
+                } catch (error) {
+                    console.error('Lỗi khi hiển thị chi tiết đơn hàng:', error);
+                    alert('Có lỗi khi hiển thị chi tiết đơn hàng. Vui lòng thử lại.');
+                }
             });
         });
         

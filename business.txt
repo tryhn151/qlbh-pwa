@@ -1,0 +1,28 @@
+Logic nghiệp vụ
+Tôi đang là một người đi buôn hàng, tôi nhập hàng từ các nhà cung cấp sau đó chở hàng đó đi bán cho các khách hàng của mình. Giá bán hàng là không cố định, nó có thể thay đổi theo thời điểm hoặc thay đổi theo từng khách hàng. Tôi muốn quản lý các chuyến hàng xem doanh thu của mỗi chuyến hàng, cũng như các chi phí khác của chuyến hàng. Ngoài ra tôi còn muốn quản lý công nợ, xem khách hàng nào còn chưa thanh toán, đang nợ bao nhiêu, ngày quá hạn. Báo cáo tổng kết doanh thu theo chuyến hàng, theo tháng, theo năm.
+Mỗi chuyến hàng phải sẽ có nhiều đơn hàng trong đó
+
+Trong mỗi đơn hàng, tôi muốn có thể thêm được các nhà cung cấp, mỗi nhà cung cấp lại thêm được sản phẩm
+Trong tab chuyến hàng, hãy bỏ phần tab đơn hàng đã giao, tôi chỉ muốn có một liên kết giữa chuyến hàng và đơn hàng (có thêm nút hủy liên kết), chỉ liên kết được các đơn hàng ở trạng thái chưa liên kết thôi (nghĩa là nó đã được giao rồi)
+Hãy kiểm tra lại tại sao khi liên kết đơn hàng với chuyến hàng, thì báo thành công nhưng có vẻ đơn hàng chưa thực sự được gán vào chuyến hàng (doanh thu,các chi phí vẫn hiển thị là 0). Bỏ phần chức năng của tab Thanh toán đi. Trong phần tab chuyến hàng, bổ sung thêm phần thành toán bên trong theo từng đơn hàng, người dùng nhập số tiền thanh toán từ đó xác định được công nợ với từng khách hàng. Khi thanh toán thành công thì cập nhật trạng thái của đơn hàng từ đang xử lý về thành công. Nếu tất cả các đơn hàng trong chuyến hàng đều ở trạng thái thành công thì cập nhật trạng thái của chuyến hàng thành đã giao
+
+
+Hãy điều chỉnh lại chức năng trong tab Đơn hàng:
+1. Tôi muốn xem được trong chuyến hàng này đang liên kết được với những đơn hàng nào, người dùng có thể hủy liên kết nếu muốn, người dùng cũng tiến hành thanh toán các đơn hàng trong danh sách này.
+2. Bug sau khi liên kết đơn hàng: báo ✅ Đã liên kết đơn hàng ID: 7 với chuyến hàng ID: 8, status: Đang xử lý ✅ Đã liên kết thành công 1/1 đơn hàng với chuyến hàng ID: 8. Tuy nhiên các thông tin về chi phí đều chưa được cập nhật
+
+
+Hãy điều chỉnh lại chức năng trong tab Chuyến hàng:
+1. Thêm một tab con để hiển thị danh sách các đơn hàng đã được liên kết thành công với chuyến hàng. Người dùng có thể hủy liên kết thông qua buton Hủy liên kết trên mỗi đơn hàng. Người dùng có thể thanh toán bằng nút thanh toán đối với từng chuyến hàng. 
+2. Loại bỏ các code rác không cần thiết đi
+
+
+Hãy điều chỉnh lại chức năng theo nghiệp vụ mới sau:
+1. Trong tab đơn hàng:
+-Thêm chức năng cho phép cập nhật lại đơn hàng
+2. Trong tab chuyến hàng
+-Thay đổi lại công thức tính toán danh thu và lợi nhuận theo từng chuyến hàng mới dựa vào chi phí của từng đơn hàng trong đó và chi phí phát sinh của chuyến hàng đó.
+-Trong tab con: đơn hàng đã liên kết: Fĩ bug: đang gặp lỗi khi thanh toán, đang không xem được chi tiết 
+3 Trong tab công nợ
+-Loại bỏ button thanh toán đi vì nó được xử lý ở trong phần chuyến hàng rồi
+-Chỉ có mục đích hiển thị dữ liệu

@@ -71,9 +71,16 @@ async function displayTripReports() {
             noReportsMessage.style.display = 'none';
 
             // Hiển thị báo cáo cho từng chuyến hàng
+            let totalCost = 0;
+            let totalRevenue = 0;
+            
             for (const trip of trips) {
                 // Tính toán kết quả kinh doanh cho chuyến hàng
                 const result = await calculateTripProfitLoss(trip.id);
+
+                // Cộng dồn để tính tổng
+                totalCost += result.totalCost;
+                totalRevenue += result.totalRevenue;
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -88,9 +95,7 @@ async function displayTripReports() {
                 reportsList.appendChild(row);
             }
 
-            // Tính tổng cộng
-            const totalCost = trips.reduce((sum, trip) => sum + (trip._totalCost || 0), 0);
-            const totalRevenue = trips.reduce((sum, trip) => sum + (trip._totalRevenue || 0), 0);
+            // Tính tổng lợi nhuận
             const totalProfit = totalRevenue - totalCost;
 
             // Thêm dòng tổng cộng

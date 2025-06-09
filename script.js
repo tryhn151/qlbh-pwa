@@ -42,6 +42,8 @@ async function loadInitialData() {
         // Tải module sản phẩm nếu hàm có sẵn
         if (typeof window.loadProductModule === 'function') {
             await window.loadProductModule();
+            // Đảm bảo populate supplier dropdown cho form sản phẩm
+            await populateSupplierDropdowns();
         } else {
             console.warn('Module sản phẩm chưa sẵn sàng - sẽ được khởi tạo sau');
         }
@@ -75,6 +77,15 @@ async function loadInitialData() {
         if (typeof setupReportEventListeners === 'function') {
             setupReportEventListeners();
         }
+        
+        // Đảm bảo tất cả dropdown được populate sau khi load xong
+        setTimeout(async () => {
+            console.log('Đang populate tất cả dropdowns sau khi load xong...');
+            await populateSupplierDropdowns();
+            await populateProductDropdowns();
+            await populateCustomerDropdowns();
+            console.log('Đã hoàn thành populate tất cả dropdowns');
+        }, 1000);
     } catch (error) {
         console.error('Lỗi khi tải dữ liệu ban đầu:', error);
     }
@@ -176,7 +187,7 @@ async function initDB() {
                         purchasesStore.createIndex('tripId', 'tripId');
                     }
 
-                    // 5. Tạo object store customerPayments
+                    // 5. Tạo object store customerPayments (DEPRECATED - sẽ được thay thế bằng payments)
                     if (!db.objectStoreNames.contains('customerPayments')) {
                         console.log('Tạo object store customerPayments');
                         const customerPaymentsStore = db.createObjectStore('customerPayments', {
@@ -184,6 +195,17 @@ async function initDB() {
                             autoIncrement: true
                         });
                         customerPaymentsStore.createIndex('customerId', 'customerId');
+                    }
+
+                    // 6. Tạo object store payments (mới cho workflow thanh toán theo đơn hàng)
+                    if (!db.objectStoreNames.contains('payments')) {
+                        console.log('Tạo object store payments');
+                        const paymentsStore = db.createObjectStore('payments', {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        paymentsStore.createIndex('orderId', 'orderId');
+                        paymentsStore.createIndex('customerId', 'customerId');
                     }
 
                     // Kiểm tra object store sales
@@ -293,48 +315,91 @@ async function initDB() {
 function setupEventListeners() {
     // Tab navigation để tải lại dữ liệu khi cần thiết
     const tabs = document.querySelectorAll('button[data-bs-toggle="tab"]');
+    // Biến để kiểm soát việc load tab
+    let isTabLoading = false;
+    
     tabs.forEach(tab => {
         tab.addEventListener('shown.bs.tab', async (e) => {
-            const targetId = e.target.getAttribute('data-bs-target');
+            // Tránh load song song nhiều tab
+            if (isTabLoading) return;
+            isTabLoading = true;
+            
+            try {
+                const targetId = e.target.getAttribute('data-bs-target');
+                console.log('Chuyển sang tab:', targetId);
 
-            // Nếu là tab khách hàng và module khách hàng tồn tại
-            if (targetId === '#customers-tab-pane' && typeof window.loadCustomerModule === 'function') {
-                // Tải lại dữ liệu khách hàng
-                console.log('Tải lại dữ liệu khách hàng khi chuyển tab');
-                await window.loadCustomerModule();
-            }
+                // Thêm delay nhỏ để tránh conflict
+                await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Nếu là tab nhà cung cấp và module nhà cung cấp tồn tại
-            if (targetId === '#suppliers-tab-pane' && typeof window.loadSupplierModule === 'function') {
-                // Tải lại dữ liệu nhà cung cấp
-                console.log('Tải lại dữ liệu nhà cung cấp khi chuyển tab');
-                await window.loadSupplierModule();
-            }
+                // Nếu là tab khách hàng
+                if (targetId === '#customers-tab-pane' && typeof window.loadCustomerModule === 'function') {
+                    console.log('Tải lại dữ liệu khách hàng khi chuyển tab');
+                    await window.loadCustomerModule();
+                }
 
-            // Nếu là tab sản phẩm và module sản phẩm tồn tại
-            if (targetId === '#products-tab-pane' && typeof window.loadProductModule === 'function') {
-                // Tải lại dữ liệu sản phẩm
-                console.log('Tải lại dữ liệu sản phẩm khi chuyển tab');
-                await window.loadProductModule();
-            }
+                // Nếu là tab nhà cung cấp
+                else if (targetId === '#suppliers-tab-pane' && typeof window.loadSupplierModule === 'function') {
+                    console.log('Tải lại dữ liệu nhà cung cấp khi chuyển tab');
+                    await window.loadSupplierModule();
+                    // Đảm bảo populate dropdown được gọi sau khi load
+                    await populateSupplierDropdowns();
+                }
 
-            // Nếu là tab công nợ
-            if (targetId === '#debts-tab-pane' && typeof window.loadDebtModule === 'function') {
-                // Tải lại dữ liệu công nợ
-                console.log('Tải lại dữ liệu công nợ khi chuyển tab');
-                await window.loadDebtModule();
-            }
+                // Nếu là tab sản phẩm
+                else if (targetId === '#products-tab-pane' && typeof window.loadProductModule === 'function') {
+                    console.log('Tải lại dữ liệu sản phẩm khi chuyển tab');
+                    await window.loadProductModule();
+                    // Đảm bảo populate dropdown được gọi sau khi load
+                    await populateProductDropdowns();
+                    // Sử dụng function riêng cho product supplier dropdown
+                    if (typeof window.populateProductSupplierDropdownsWithRetry === 'function') {
+                        await window.populateProductSupplierDropdownsWithRetry();
+                    } else if (typeof window.populateProductSupplierDropdowns === 'function') {
+                        await window.populateProductSupplierDropdowns();
+                    }
+                }
 
-            // Nếu là tab báo cáo
-            if (targetId === '#reports-tab-pane') {
-                // Tải lại dữ liệu báo cáo
-                console.log('Tải lại dữ liệu báo cáo khi chuyển tab');
-                await displayReports();
+                // Nếu là tab đơn hàng
+                else if (targetId === '#orders-tab-pane' && typeof window.loadOrderModule === 'function') {
+                    console.log('Tải lại dữ liệu đơn hàng khi chuyển tab');
+                    await window.loadOrderModule();
+                    // Đảm bảo populate dropdown được gọi sau khi load
+                    await populateSupplierDropdowns();
+                    await populateCustomerDropdowns();
+                }
+
+                // Nếu là tab chuyến hàng
+                else if (targetId === '#trips-tab-pane' && typeof displayTrips === 'function') {
+                    console.log('Tải lại dữ liệu chuyến hàng khi chuyển tab');
+                    await displayTrips();
+                }
+
+                // Nếu là tab thanh toán
+                else if (targetId === '#payments-tab-pane' && typeof displayPayments === 'function') {
+                    console.log('Tải lại dữ liệu thanh toán khi chuyển tab');
+                    await displayPayments();
+                    // Đảm bảo populate dropdown được gọi sau khi load
+                    await populateCustomerDropdowns();
+                }
+
+                // Nếu là tab công nợ
+                else if (targetId === '#debts-tab-pane' && typeof window.loadDebtModule === 'function') {
+                    console.log('Tải lại dữ liệu công nợ khi chuyển tab');
+                    await window.loadDebtModule();
+                }
+
+                // Nếu là tab báo cáo
+                else if (targetId === '#reports-tab-pane') {
+                    console.log('Tải lại dữ liệu báo cáo khi chuyển tab');
+                    await displayReports();
+                }
+            } catch (error) {
+                console.error('Lỗi khi chuyển tab:', error);
+            } finally {
+                isTabLoading = false;
             }
         });
     });
-
-
 
     // Nút Export Data
     if (document.getElementById('export-btn')) {
@@ -767,5 +832,145 @@ function getStatusBadgeClass(status) {
             return 'bg-danger';
         default:
             return 'bg-secondary';
+    }
+}
+
+// ===== HÀM POPULATE DROPDOWN TOÀN CỤC =====
+
+// Hàm populate dropdown nhà cung cấp toàn cục
+async function populateSupplierDropdowns() {
+    // Tìm hàm populate trong supplier.js
+    if (typeof window.populateSupplierDropdowns === 'function') {
+        return await window.populateSupplierDropdowns();
+    }
+    
+    // Fallback - thực hiện populate trực tiếp
+    try {
+        const supplierDropdowns = document.querySelectorAll('.supplier-select, #product-supplier, [data-supplier-dropdown]');
+        if (supplierDropdowns.length === 0) return;
+        
+        const db = await new Promise((resolve) => {
+            const checkDB = () => {
+                if (window.db) resolve(window.db);
+                else setTimeout(checkDB, 100);
+            };
+            checkDB();
+        });
+        
+        const tx = db.transaction('suppliers', 'readonly');
+        const store = tx.objectStore('suppliers');
+        const suppliers = await store.getAll();
+        
+        supplierDropdowns.forEach(dropdown => {
+            const selectedValue = dropdown.value;
+            while (dropdown.options.length > 1) {
+                dropdown.remove(1);
+            }
+            
+            suppliers.forEach(supplier => {
+                const option = document.createElement('option');
+                option.value = supplier.id;
+                option.textContent = supplier.name;
+                dropdown.appendChild(option);
+            });
+            
+            if (selectedValue) dropdown.value = selectedValue;
+        });
+        
+        console.log('Đã populate dropdown nhà cung cấp');
+    } catch (error) {
+        console.error('Lỗi khi populate dropdown nhà cung cấp:', error);
+    }
+}
+
+// Hàm populate dropdown sản phẩm toàn cục
+async function populateProductDropdowns() {
+    // Tìm hàm populate trong product.js
+    if (typeof window.populateProductDropdowns === 'function') {
+        return await window.populateProductDropdowns();
+    }
+    
+    // Fallback - thực hiện populate trực tiếp
+    try {
+        const productDropdowns = document.querySelectorAll('.product-select');
+        if (productDropdowns.length === 0) return;
+        
+        const db = await new Promise((resolve) => {
+            const checkDB = () => {
+                if (window.db) resolve(window.db);
+                else setTimeout(checkDB, 100);
+            };
+            checkDB();
+        });
+        
+        const tx = db.transaction('products', 'readonly');
+        const store = tx.objectStore('products');
+        const products = await store.getAll();
+        
+        productDropdowns.forEach(dropdown => {
+            const selectedValue = dropdown.value;
+            while (dropdown.options.length > 1) {
+                dropdown.remove(1);
+            }
+            
+            products.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = `${product.name} (${product.code || 'Không mã'})`;
+                dropdown.appendChild(option);
+            });
+            
+            if (selectedValue) dropdown.value = selectedValue;
+        });
+        
+        console.log('Đã populate dropdown sản phẩm');
+    } catch (error) {
+        console.error('Lỗi khi populate dropdown sản phẩm:', error);
+    }
+}
+
+// Hàm populate dropdown khách hàng toàn cục
+async function populateCustomerDropdowns() {
+    // Tìm hàm populate trong customer.js
+    if (typeof window.populateCustomerDropdowns === 'function') {
+        return await window.populateCustomerDropdowns();
+    }
+    
+    // Fallback - thực hiện populate trực tiếp
+    try {
+        const customerDropdowns = document.querySelectorAll('#order-customer, #payment-customer');
+        if (customerDropdowns.length === 0) return;
+        
+        const db = await new Promise((resolve) => {
+            const checkDB = () => {
+                if (window.db) resolve(window.db);
+                else setTimeout(checkDB, 100);
+            };
+            checkDB();
+        });
+        
+        const tx = db.transaction('customers', 'readonly');
+        const store = tx.objectStore('customers');
+        const customers = await store.getAll();
+        
+        customerDropdowns.forEach(dropdown => {
+            const selectedValue = dropdown.value;
+            while (dropdown.options.length > 1) {
+                dropdown.remove(1);
+            }
+            
+            customers.forEach(customer => {
+                const option = document.createElement('option');
+                option.value = customer.id;
+                option.textContent = customer.name;
+                dropdown.appendChild(option);
+            });
+            
+            if (selectedValue) dropdown.value = selectedValue;
+        });
+        
+        console.log('Đã populate dropdown khách hàng');
+    } catch (error) {
+        console.error('Lỗi khi populate dropdown khách hàng:', error);
     }
 }

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Chức Năng CRUD</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { border: 1px solid #ddd; margin: 10px 0; padding: 15px; }
+        .success { color: green; }
+        .error { color: red; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Chức Năng CRUD - PWA Quản Lý Bán Hàng</h1>
+    
+    <div class="test-section">
+        <h2>🔍 Kiểm Tra Database Connection</h2>
+        <button onclick="testDatabase()">Test Database</button>
+        <div id="db-result" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🏪 Test Nhà Cung Cấp</h2>
+        <button onclick="testSupplier()">Test Add Supplier</button>
+        <button onclick="testSupplierList()">Test Display Suppliers</button>
+        <div id="supplier-result" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📦 Test Sản Phẩm</h2>
+        <button onclick="testProduct()">Test Add Product</button>
+        <button onclick="testProductList()">Test Display Products</button>
+        <div id="product-result" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📋 Console Log</h2>
+        <div id="console-log" class="log" style="height: 200px; overflow-y: auto;"></div>
+    </div>
+
+    <!-- Load các script -->
+    <script src="https://unpkg.com/idb@8/build/umd.js"></script>
+    <script src="script.js"></script>
+    <script src="customer.js"></script>
+    <script src="supplier.js"></script>
+    <script src="product.js"></script>
+
+    <script>
+        // Override console.log để hiển thị trong page
+        const originalLog = console.log;
+        const originalError = console.error;
+        const consoleDiv = document.getElementById('console-log');
+        
+        function addToConsole(message, type = 'log') {
+            const time = new Date().toLocaleTimeString();
+            const color = type === 'error' ? 'red' : 'black';
+            consoleDiv.innerHTML += `<div style="color: ${color}">[${time}] ${message}</div>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            
+            if (type === 'error') {
+                originalError(message);
+            } else {
+                originalLog(message);
+            }
+        }
+        
+        console.log = function(message) {
+            addToConsole(message, 'log');
+        };
+        
+        console.error = function(message) {
+            addToConsole(message, 'error');
+        };
+
+        // Test functions
+        async function testDatabase() {
+            const resultDiv = document.getElementById('db-result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                // Chờ database được khởi tạo
+                const dbReady = await new Promise((resolve) => {
+                    let attempts = 0;
+                    const checkDB = () => {
+                        attempts++;
+                        if (window.db) {
+                            resolve(true);
+                        } else if (attempts < 50) {
+                            setTimeout(checkDB, 100);
+                        } else {
+                            resolve(false);
+                        }
+                    };
+                    checkDB();
+                });
+                
+                if (dbReady) {
+                    resultDiv.innerHTML = '<span class="success">✅ Database connected successfully!</span>';
+                    console.log('Database test: SUCCESS');
+                } else {
+                    resultDiv.innerHTML = '<span class="error">❌ Database connection failed!</span>';
+                    console.error('Database test: FAILED');
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ Error: ${error.message}</span>`;
+                console.error('Database test error:', error);
+            }
+        }
+
+        async function testSupplier() {
+            const resultDiv = document.getElementById('supplier-result');
+            resultDiv.innerHTML = 'Testing supplier...';
+            
+            try {
+                if (typeof addSupplier === 'function') {
+                    const testData = {
+                        name: 'Test Supplier ' + Date.now(),
+                        region: 'Test Region',
+                        address: 'Test Address',
+                        contact: '0123456789'
+                    };
+                    
+                    const result = await addSupplier(testData);
+                    if (result) {
+                        resultDiv.innerHTML = '<span class="success">✅ Add supplier successful!</span>';
+                        console.log('Add supplier test: SUCCESS');
+                    } else {
+                        resultDiv.innerHTML = '<span class="error">❌ Add supplier failed!</span>';
+                        console.error('Add supplier test: FAILED');
+                    }
+                } else {
+                    resultDiv.innerHTML = '<span class="error">❌ addSupplier function not found!</span>';
+                    console.error('addSupplier function not found');
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ Error: ${error.message}</span>`;
+                console.error('Supplier test error:', error);
+            }
+        }
+
+        async function testSupplierList() {
+            try {
+                if (typeof displaySuppliers === 'function') {
+                    await displaySuppliers();
+                    console.log('Display suppliers test: SUCCESS');
+                } else {
+                    console.error('displaySuppliers function not found');
+                }
+            } catch (error) {
+                console.error('Display suppliers error:', error);
+            }
+        }
+
+        async function testProduct() {
+            const resultDiv = document.getElementById('product-result');
+            resultDiv.innerHTML = 'Testing product...';
+            
+            try {
+                if (typeof addProduct === 'function') {
+                    const testData = {
+                        name: 'Test Product ' + Date.now(),
+                        code: 'TEST' + Date.now(),
+                        unit: 'piece',
+                        purchasePrice: 100000,
+                        supplierId: 1
+                    };
+                    
+                    const result = await addProduct(testData);
+                    if (result) {
+                        resultDiv.innerHTML = '<span class="success">✅ Add product successful!</span>';
+                        console.log('Add product test: SUCCESS');
+                    } else {
+                        resultDiv.innerHTML = '<span class="error">❌ Add product failed!</span>';
+                        console.error('Add product test: FAILED');
+                    }
+                } else {
+                    resultDiv.innerHTML = '<span class="error">❌ addProduct function not found!</span>';
+                    console.error('addProduct function not found');
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ Error: ${error.message}</span>`;
+                console.error('Product test error:', error);
+            }
+        }
+
+        async function testProductList() {
+            try {
+                if (typeof displayProducts === 'function') {
+                    await displayProducts();
+                    console.log('Display products test: SUCCESS');
+                } else {
+                    console.error('displayProducts function not found');
+                }
+            } catch (error) {
+                console.error('Display products error:', error);
+            }
+        }
+
+        // Auto run database test when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                testDatabase();
+            }, 1000);
+        });
+    </script>
+</body>
+</html> 

@@ -412,8 +412,11 @@ async function searchProducts(keyword) {
 async function populateProductDropdowns() {
     try {
         // Lấy tất cả các dropdown sản phẩm
-        const productDropdowns = document.querySelectorAll('select[data-product-dropdown]');
-        if (productDropdowns.length === 0) return;
+        const productDropdowns = document.querySelectorAll('.product-select');
+        if (productDropdowns.length === 0) {
+            console.log('Không tìm thấy dropdown sản phẩm nào');
+            return;
+        }
         
         const db = await waitForDB();
         if (!db) {
@@ -559,6 +562,120 @@ function setupProductEventListeners() {
     console.log('Đã thiết lập các event listener cho quản lý sản phẩm');
 }
 
+// Đổ danh sách nhà cung cấp vào dropdown trong product tab (học theo order.js)
+async function populateProductSupplierDropdowns() {
+    try {
+        const db = await waitForDB();
+        if (!db) {
+            console.error('Không thể kết nối đến cơ sở dữ liệu để tải danh sách nhà cung cấp');
+            return false;
+        }
+        
+        // Chỉ target dropdown trong product tab
+        const productSupplierDropdown = document.getElementById('product-supplier');
+        if (!productSupplierDropdown) {
+            console.log('Không tìm thấy dropdown #product-supplier');
+            return false;
+        }
+        
+        const tx = db.transaction('suppliers', 'readonly');
+        const store = tx.objectStore('suppliers');
+        const suppliers = await store.getAll();
+        
+        // Lưu giá trị đã chọn
+        const selectedValue = productSupplierDropdown.value;
+        
+        // Xóa tất cả options trừ option đầu tiên
+        while (productSupplierDropdown.options.length > 1) {
+            productSupplierDropdown.remove(1);
+        }
+        
+        // Đảm bảo có option đầu tiên
+        if (productSupplierDropdown.options.length === 0) {
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'Chọn nhà cung cấp';
+            defaultOption.disabled = true;
+            defaultOption.selected = true;
+            productSupplierDropdown.appendChild(defaultOption);
+        }
+        
+        // Thêm các nhà cung cấp
+        suppliers.forEach(supplier => {
+            const option = document.createElement('option');
+            option.value = supplier.id;
+            option.textContent = supplier.name;
+            productSupplierDropdown.appendChild(option);
+        });
+        
+        // Khôi phục giá trị đã chọn
+        if (selectedValue) {
+            productSupplierDropdown.value = selectedValue;
+        }
+        
+        console.log(`✅ Đã populate dropdown #product-supplier với ${suppliers.length} nhà cung cấp`);
+        return true;
+        
+    } catch (error) {
+        console.error('Lỗi khi tải danh sách nhà cung cấp cho product tab:', error);
+        return false;
+    }
+}
+
+// Hàm populate với retry mechanism cho product tab
+async function populateProductSupplierDropdownsWithRetry(maxAttempts = 3) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            // Thêm delay tăng dần cho mỗi lần retry
+            if (attempt > 1) {
+                await new Promise(resolve => setTimeout(resolve, 200 * (attempt - 1)));
+                console.log(`🔄 Retry populate product suppliers lần ${attempt}...`);
+            }
+            
+            const result = await populateProductSupplierDropdowns();
+            if (result) {
+                console.log(`✅ Populate product suppliers thành công ở lần thử ${attempt}`);
+                return true;
+            }
+        } catch (error) {
+            console.log(`❌ Lần thử ${attempt} thất bại:`, error.message);
+            if (attempt === maxAttempts) {
+                console.error('🚨 Đã thử tối đa', maxAttempts, 'lần nhưng vẫn không thể populate product supplier dropdown');
+                
+                // Fallback: Thử observer pattern
+                observeProductSupplierDropdown();
+            }
+        }
+    }
+    return false;
+}
+
+// Observer để tự động populate khi DOM element xuất hiện cho product tab
+function observeProductSupplierDropdown() {
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'childList') {
+                const productSupplierDropdown = document.getElementById('product-supplier');
+                if (productSupplierDropdown && productSupplierDropdown.options.length <= 1) {
+                    console.log('🔍 Detected empty #product-supplier dropdown, attempting populate...');
+                    populateProductSupplierDropdowns();
+                }
+            }
+        });
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    
+    // Auto disconnect after 5 seconds to avoid memory leaks
+    setTimeout(() => {
+        observer.disconnect();
+        console.log('🔍 Product supplier dropdown observer disconnected');
+    }, 5000);
+}
+
 // Hàm khởi động module sản phẩm - có thể gọi từ script.js
 window.loadProductModule = async function() {
     try {
@@ -578,8 +695,16 @@ window.loadProductModule = async function() {
         // Đổ danh sách sản phẩm vào dropdown
         await populateProductDropdowns();
         
+        // Đổ danh sách nhà cung cấp vào dropdown (sử dụng function riêng cho product)
+        await populateProductSupplierDropdownsWithRetry();
+        
         // Thiết lập các event listener
         setupProductEventListeners();
+        
+        // Đăng ký các hàm populate làm global  
+        window.populateProductDropdowns = populateProductDropdowns;
+        window.populateProductSupplierDropdowns = populateProductSupplierDropdowns;
+        window.populateProductSupplierDropdownsWithRetry = populateProductSupplierDropdownsWithRetry;
         
         console.log('Module sản phẩm đã khởi tạo thành công');
         return true;
