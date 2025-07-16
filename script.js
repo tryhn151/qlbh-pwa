@@ -57,8 +57,14 @@ async function loadInitialData() {
             await displayOrders();
         }
 
-        // Hiển thị danh sách chuyến hàng
+        // Tải module chuyến hàng nếu hàm có sẵn
+        if (typeof window.loadTripModule === 'function') {
+            await window.loadTripModule();
+        } else {
+            console.warn('Module chuyến hàng chưa sẵn sàng - sẽ được khởi tạo sau');
+            // Hiển thị danh sách chuyến hàng (fallback cũ)
         await displayTrips();
+        }
 
         // Hiển thị danh sách thanh toán
         await displayPayments();
@@ -142,7 +148,7 @@ async function initDB() {
         }
 
         console.log('Thư viện idb đã được tải, tiếp tục khởi tạo database...');
-        window.db = await idb.openDB('salesAppDB', 3, {
+        window.db = await idb.openDB('salesAppDB', 4, { // Tăng version lên 4
             upgrade(db, oldVersion, newVersion, transaction) {
                 console.log(`Đang nâng cấp database từ phiên bản ${oldVersion} lên ${newVersion}...`);
 
@@ -292,6 +298,14 @@ async function initDB() {
                         }
                     }
                 }
+
+                // Nâng cấp lên phiên bản 4 - Thêm object store legacyDebts nếu chưa có
+                if (oldVersion < 4) {
+                    if (!db.objectStoreNames.contains('legacyDebts')) {
+                        console.log('Tạo object store legacyDebts');
+                        db.createObjectStore('legacyDebts', { keyPath: 'id', autoIncrement: true });
+                    }
+                }
             }
         });
 
@@ -391,7 +405,9 @@ function setupEventListeners() {
                 // Nếu là tab báo cáo
                 else if (targetId === '#reports-tab-pane') {
                     console.log('Tải lại dữ liệu báo cáo khi chuyển tab');
-                    await displayReports();
+                    if (typeof window.loadReportModule === "function") {
+                        await window.loadReportModule();
+                    }
                 }
             } catch (error) {
                 console.error('Lỗi khi chuyển tab:', error);
@@ -443,100 +459,11 @@ function setupEventListeners() {
     // }
 
     // ===== Tab Đơn hàng =====
-    // Nút thêm sản phẩm trong form đơn hàng
-    if (document.getElementById('add-product-btn')) {
-        document.getElementById('add-product-btn').addEventListener('click', () => {
-            addOrderItemRow();
-        });
-    }
-
-    // Form tạo đơn hàng
-    if (document.getElementById('order-form')) {
-        document.getElementById('order-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const customerId = parseInt(document.getElementById('order-customer').value);
-            const orderItems = [];
-
-            // Lấy thông tin các sản phẩm trong đơn hàng
-            const itemElements = document.querySelectorAll('.order-item');
-
-            for (const itemElement of itemElements) {
-                const productName = itemElement.querySelector('.product-name').value.trim();
-                const qty = parseInt(itemElement.querySelector('.product-qty').value);
-                const sellingPrice = parseFloat(itemElement.querySelector('.product-price').value);
-
-                if (productName && qty > 0 && sellingPrice >= 0) {
-                    orderItems.push({
-                        productName,
-                        qty,
-                        sellingPrice
-                    });
-                }
-            }
-
-            if (customerId && orderItems.length > 0) {
-                const orderData = {
-                    customerId,
-                    orderDate: new Date(),
-                    status: 'Mới',
-                    items: orderItems,
-                    deliveredTripId: null
-                };
-
-                await addOrder(orderData);
-
-                // Reset form
-                document.getElementById('order-form').reset();
-
-                // Xóa các dòng sản phẩm trừ dòng đầu tiên
-                const orderItemsContainer = document.getElementById('order-items');
-                const items = orderItemsContainer.querySelectorAll('.order-item');
-
-                // Giữ lại dòng đầu tiên và reset nó
-                if (items.length > 0) {
-                    const firstItem = items[0];
-                    firstItem.querySelector('.product-name').value = '';
-                    firstItem.querySelector('.product-qty').value = '1';
-                    firstItem.querySelector('.product-price').value = '';
-
-                    // Xóa các dòng còn lại
-                    for (let i = 1; i < items.length; i++) {
-                        orderItemsContainer.removeChild(items[i]);
-                    }
-                }
-
-                // Đổ lại danh sách khách hàng vào dropdown
-                await populateCustomerDropdowns();
-            }
-        });
-    }
+    // Order management được xử lý trong order.js
 
     // ===== Tab Chuyến hàng =====
-    // Form tạo chuyến hàng
-    if (document.getElementById('trip-form')) {
-        document.getElementById('trip-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const tripName = document.getElementById('trip-name').value.trim();
-            const tripDate = document.getElementById('trip-date').value;
-
-            if (tripName && tripDate) {
-                const tripData = {
-                    tripName,
-                    tripDate: new Date(tripDate),
-                    status: 'Mới tạo'
-                };
-
-                await addTrip(tripData);
-
-                // Reset form
-                document.getElementById('trip-form').reset();
-                document.getElementById('trip-date').value = new Date().toISOString().split('T')[0];
-                document.getElementById('trip-name').focus();
-            }
-        });
-    }
+    // Trip management được xử lý trong trip.js (TripModule)
+    // Legacy event listeners đã được comment out để tránh xung đột với TripModule
 
     // ===== Tab Thanh toán =====
     // Form ghi nhận thanh toán

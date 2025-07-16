@@ -1,464 +1,1211 @@
-// ===== CÁC HÀM XỬ LÝ CHO QUẢN LÝ KHÁCH HÀNG =====
+// ===== CUSTOMER MANAGEMENT MODULE =====
+// Complete customer management with modern UI and validation
+// Senior JS Developer: Modular approach for better maintainability
 
-// Hàm chờ database sẵn sàng trước khi thực hiện các thao tác
-async function waitForDB() {
+// ===== MODULE STRUCTURE =====
+const CustomerModule = {
+    // Data storage
+    data: {
+        currentCustomers: [],
+        filteredCustomers: [],
+        customerToDelete: null
+    },
+
+    // Configuration
+    config: {
+        validationRules: {
+            name: {
+                required: true,
+                minLength: 2,
+                maxLength: 100,
+                message: 'Tên khách hàng phải từ 2-100 ký tự'
+            },
+            contact: {
+                required: false,
+                pattern: /^0(3[2-9]|5[689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$/,
+                message: 'Số điện thoại không đúng định dạng. VD: 0912345678'
+            }
+        },
+        fieldDisplayNames: {
+            name: 'Tên khách hàng',
+            contact: 'Số điện thoại'
+        }
+    },
+
+    // ===== UTILITY FUNCTIONS =====
+    utils: {
+        // Safe value handler
+        safeValue(value, defaultValue = '') {
+            if (value === null || value === undefined || value === 'null' || value === 'undefined') {
+                return defaultValue;
+            }
+            if (typeof value === 'string' && value.trim() === '') {
+                return defaultValue;
+            }
+            return value;
+        },
+
+        // Wait for database
+        async waitForDB() {
     return new Promise((resolve) => {
-        // Kiểm tra liệu database đã được khởi tạo chưa
         if (window.db) {
-            console.log('Database đã sẵn sàng');
-            // Thử test transaction để đảm bảo db có thể sử dụng
             try {
                 const tx = window.db.transaction('customers', 'readonly');
-                tx.abort(); // Không cần làm gì, chỉ kiểm tra
-                console.log('Đã test transaction thành công');
+                        tx.abort();
                 resolve(window.db);
                 return;
             } catch (error) {
-                console.warn('Database chưa sẵn sàng cho transaction:', error);
-                // Tiếp tục xuống phần chờ
-            }
-        }
-        
-        console.log('Chờ database khởi tạo...');
-        
-        // Kiểm tra xem thư viện idb đã được tải chưa
-        if (typeof idb === 'undefined') {
-            console.error('Lỗi: Thư viện idb chưa được tải');
-            alert('Lỗi: Thư viện idb chưa được tải. Vui lòng tải lại trang.');
-            resolve(null);
-            return;
-        }
-        
-        // Nếu chưa, thiết lập một interval để kiểm tra định kỳ
+                        // Continue waiting
+                    }
+                }
+                
         let attempts = 0;
-        const maxAttempts = 150; // Tăng lên 150 lần (~15 giây)
+                const maxAttempts = 150;
         
         const checkInterval = setInterval(() => {
             attempts++;
             
             if (window.db) {
-                // Thử test transaction
                 try {
                     const tx = window.db.transaction('customers', 'readonly');
-                    tx.abort(); // Không cần làm gì, chỉ kiểm tra
+                            tx.abort();
                     
                     clearInterval(checkInterval);
-                    console.log(`Database đã sẵn sàng sau ${attempts} lần thử`);
                     resolve(window.db);
                 } catch (error) {
-                    console.log(`Lần thử ${attempts}: Database chưa sẵn sàng cho transaction - ${error.message}`);
-                    // Tiếp tục chờ
+                            // Continue waiting
                 }
             } else if (attempts >= maxAttempts) {
                 clearInterval(checkInterval);
-                console.error('Lỗi: Không thể kết nối đến cơ sở dữ liệu sau nhiều lần thử');
-                resolve(null); // Resolve với null để code có thể xử lý lỗi
+                        resolve(null);
             }
-        }, 100); // Kiểm tra mỗi 100ms
+                }, 100);
         
-        // Đặt timeout để tránh chờ vô hạn (tăng lên 15 giây)
         setTimeout(() => {
             clearInterval(checkInterval);
-            console.error('Lỗi: Không thể kết nối đến cơ sở dữ liệu sau 15 giây');
-            resolve(null); // Resolve với null để code có thể xử lý lỗi
-        }, 15000); // Timeout sau 15 giây
-    });
-}
+                    resolve(null);
+                }, 15000);
+            });
+        },
 
-// Event listener cho form khách hàng
-document.addEventListener('DOMContentLoaded', () => {
-    // Chỉ thiết lập các event listener, không gọi hàm nào yêu cầu database!
-    setupCustomerEventListeners();
-});
-
-// Thiết lập các event listener cho phần quản lý khách hàng
-function setupCustomerEventListeners() {
-    // Form thêm khách hàng
-    const customerForm = document.getElementById('customer-form');
-    if (customerForm) {
-        customerForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const name = document.getElementById('customer-name').value.trim();
-            const contact = document.getElementById('customer-contact').value.trim();
-            
-            if (name) {
-                const customerData = {
-                    name,
-                    contact
-                };
+        // Clean up modals
+        cleanupAllModals() {
+            try {
+                // Remove all existing backdrop elements
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
                 
-                // Kiểm tra xem đang thêm mới hay chỉnh sửa
-                const editId = customerForm.getAttribute('data-edit-id');
-                if (editId) {
-                    // Chỉnh sửa khách hàng
-                    await updateCustomer(parseInt(editId), customerData);
-                } else {
-                    // Thêm khách hàng mới
-                    await addCustomer(customerData);
-                    customerForm.reset();
-                    document.getElementById('customer-name').focus();
+                // Reset body state
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('padding-right');
+                document.body.style.removeProperty('overflow');
+                
+                // Dispose all modal instances safely
+                const modalElements = document.querySelectorAll('.modal');
+                modalElements.forEach(modalEl => {
+                    const instance = bootstrap.Modal.getInstance(modalEl);
+                    if (instance) {
+                        try {
+                            instance.dispose();
+                        } catch (e) {
+                            console.log('⚠️ Customer modal instance disposal warning:', e);
+                        }
+                    }
+                    
+                    // Ensure modal is hidden
+                    modalEl.style.display = 'none';
+                    modalEl.classList.remove('show');
+                    modalEl.setAttribute('aria-hidden', 'true');
+                    modalEl.removeAttribute('aria-modal');
+                    modalEl.removeAttribute('role');
+                });
+                
+                console.log('🧹 Cleaned up all customer modals');
+            } catch (error) {
+                console.log('⚠️ Error during customer modal cleanup:', error);
+            }
+        }
+    },
+
+    // ===== VALIDATION SYSTEM =====
+    validation: {
+        // Validate single field
+        validateField(fieldName, value) {
+            const rule = CustomerModule.config.validationRules[fieldName];
+            if (!rule) return { valid: true };
+
+            const trimmedValue = String(value || '').trim();
+            
+            // Required check
+            if (rule.required && !trimmedValue) {
+                return { 
+                    valid: false, 
+                    message: `${CustomerModule.config.fieldDisplayNames[fieldName]} là bắt buộc` 
+                };
+            }
+
+            // Skip other validations if field is empty and not required
+            if (!trimmedValue && !rule.required) {
+                return { valid: true };
+            }
+
+            // Min length check
+            if (rule.minLength && trimmedValue.length < rule.minLength) {
+                return { 
+                    valid: false, 
+                    message: `${CustomerModule.config.fieldDisplayNames[fieldName]} phải có ít nhất ${rule.minLength} ký tự` 
+                };
+            }
+
+            // Max length check
+            if (rule.maxLength && trimmedValue.length > rule.maxLength) {
+                return { 
+                    valid: false, 
+                    message: `${CustomerModule.config.fieldDisplayNames[fieldName]} không được quá ${rule.maxLength} ký tự` 
+                };
+            }
+
+            // Pattern validation for phone
+            if (fieldName === 'contact' && trimmedValue && rule.pattern) {
+                if (!rule.pattern.test(trimmedValue)) {
+                    return { valid: false, message: rule.message };
                 }
             }
-        });
-    }
-    
-    // Ô tìm kiếm khách hàng
-    const customerSearchInput = document.getElementById('customer-search');
-    if (customerSearchInput) {
-        customerSearchInput.addEventListener('input', async () => {
-            await searchCustomers(customerSearchInput.value.trim());
-        });
-    }
-    
-    console.log('Đã thiết lập các event listener cho quản lý khách hàng');
-}
 
-// Tạo ô tìm kiếm khách hàng
-function createCustomerSearchBox() {
-    try {
-        // Tìm thẻ chứa bảng khách hàng
-        const customerTableCard = document.querySelector('#customers-tab-pane .col-md-8 .card-header');
-        if (!customerTableCard) {
-            console.warn('Không tìm thấy phần tử .card-header trong tab khách hàng');
-            return;
+            return { valid: true };
+        },
+
+        // Check duplicate name
+        async checkDuplicateName(name, excludeId = null) {
+            const trimmedName = name.trim().toLowerCase();
+            return CustomerModule.data.currentCustomers.some(customer => 
+                customer.name.toLowerCase() === trimmedName && 
+                customer.id !== excludeId
+            );
+        },
+
+        // Validate entire form
+        async validateForm(formData, editId = null) {
+            const errors = [];
+
+            // Validate each field
+            for (const fieldName in formData) {
+                const validation = CustomerModule.validation.validateField(fieldName, formData[fieldName]);
+                if (!validation.valid) {
+                    errors.push(validation.message);
+                }
+            }
+
+            // Check for duplicate name
+            if (formData.name && formData.name.trim()) {
+                const isDuplicate = await CustomerModule.validation.checkDuplicateName(formData.name, editId);
+                if (isDuplicate) {
+                    errors.push('Tên khách hàng đã tồn tại');
+                }
+            }
+
+            return {
+                valid: errors.length === 0,
+                errors: errors
+            };
+        }
+    },
+
+    // ===== DATABASE OPERATIONS =====
+    database: {
+        // Add customer (keeping original logic)
+        async add(customerData) {
+            try {
+                const db = await CustomerModule.utils.waitForDB();
+                if (!db) {
+                    throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+                }
+
+                // Backend validation
+                if (!customerData.name || !customerData.name.trim()) {
+                    throw new Error('Tên khách hàng là bắt buộc');
+                }
+
+                // Normalize data
+                const normalizedData = {
+                    name: customerData.name.trim(),
+                    contact: customerData.contact ? customerData.contact.trim() : '',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                };
+
+                const tx = db.transaction('customers', 'readwrite');
+                const store = tx.objectStore('customers');
+                
+                const id = await store.add(normalizedData);
+                await tx.done;
+                
+                console.log('✅ Added customer with ID:', id);
+                return id;
+            } catch (error) {
+                console.error('❌ Error adding customer:', error);
+                throw error;
+            }
+        },
+
+        // Update customer (keeping original logic)
+        async update(customerId, customerData) {
+            try {
+                const db = await CustomerModule.utils.waitForDB();
+                if (!db) {
+                    throw new Error('Không thể kết nối đến cơ sở dữ liệu');
+                }
+
+                // Backend validation
+                if (!customerData.name || !customerData.name.trim()) {
+                    throw new Error('Tên khách hàng là bắt buộc');
+                }
+
+                const tx = db.transaction('customers', 'readwrite');
+                const store = tx.objectStore('customers');
+                
+                // Get existing customer
+                const existingCustomer = await store.get(customerId);
+                if (!existingCustomer) {
+                    throw new Error('Không tìm thấy khách hàng');
+                }
+                
+                // Normalize and update data
+                const normalizedData = {
+                    name: customerData.name.trim(),
+                    contact: customerData.contact ? customerData.contact.trim() : '',
+                    updated_at: new Date().toISOString()
+                };
+
+                const updatedCustomer = { 
+                    ...existingCustomer, 
+                    ...normalizedData 
+                };
+                
+                await store.put(updatedCustomer);
+                await tx.done;
+                
+                console.log('✅ Updated customer with ID:', customerId);
+                return true;
+            } catch (error) {
+                console.error('❌ Error updating customer:', error);
+                throw error;
+            }
+        },
+
+        // Delete customer (keeping original logic)
+        async delete(customerId) {
+            try {
+                const db = await CustomerModule.utils.waitForDB();
+        if (!db) {
+            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
         }
         
-        // Kiểm tra xem đã có ô tìm kiếm chưa
-        if (document.getElementById('customer-search')) {
-            // Đã tồn tại ô tìm kiếm, không cần tạo mới
-            return;
+                const tx = db.transaction('customers', 'readwrite');
+                const store = tx.objectStore('customers');
+                
+                await store.delete(customerId);
+                await tx.done;
+                
+                console.log('✅ Deleted customer with ID:', customerId);
+                return true;
+            } catch (error) {
+                console.error('❌ Error deleting customer:', error);
+                throw error;
+            }
+        },
+
+        // Get single customer
+        async get(customerId) {
+            try {
+                const db = await CustomerModule.utils.waitForDB();
+                if (!db) return null;
+
+        const tx = db.transaction('customers', 'readonly');
+        const store = tx.objectStore('customers');
+                return await store.get(customerId);
+            } catch (error) {
+                console.error('❌ Error getting customer:', error);
+                return null;
+            }
+        },
+
+        // Load all customers
+        async loadAll() {
+            try {
+                const db = await CustomerModule.utils.waitForDB();
+                if (!db) return;
+
+                const tx = db.transaction('customers', 'readonly');
+                const store = tx.objectStore('customers');
+                CustomerModule.data.currentCustomers = await store.getAll();
+                CustomerModule.data.filteredCustomers = [...CustomerModule.data.currentCustomers];
+                
+                console.log(`📊 Loaded ${CustomerModule.data.currentCustomers.length} customers`);
+            } catch (error) {
+                console.error('❌ Error loading customers:', error);
+                CustomerModule.data.currentCustomers = [];
+                CustomerModule.data.filteredCustomers = [];
+            }
         }
-        
-        // Tạo ô tìm kiếm và thêm vào trước bảng
-        const searchDiv = document.createElement('div');
-        searchDiv.className = 'input-group mb-3 mt-3';
-        searchDiv.innerHTML = `
-            <input type="text" id="customer-search" class="form-control" placeholder="Tìm kiếm khách hàng...">
-            <button class="btn btn-outline-secondary" type="button" id="clear-customer-search">
-                <i class="bi bi-x"></i> Xóa
-            </button>
-        `;
-        
-        // Chèn ô tìm kiếm vào sau tiêu đề card
-        customerTableCard.parentNode.insertBefore(searchDiv, customerTableCard.nextSibling);
-        
-        // Thêm sự kiện cho nút xóa tìm kiếm
-        const clearButton = document.getElementById('clear-customer-search');
-        if (clearButton) {
-            clearButton.addEventListener('click', () => {
-                const searchInput = document.getElementById('customer-search');
-                if (searchInput) {
-                    searchInput.value = '';
-                    displayCustomers(); // Hiển thị lại tất cả khách hàng
+    },
+
+    // ===== UI COMPONENTS =====
+    ui: {
+        // Update customers count
+        updateCount() {
+            const countElement = document.getElementById('customers-count');
+            if (countElement) {
+                countElement.textContent = CustomerModule.data.filteredCustomers.length;
+            }
+        },
+
+        // Render desktop table
+        renderDesktopTable() {
+            const tableBody = document.getElementById('customers-list');
+            if (!tableBody) return;
+
+            // Sửa header bảng desktop cho giống supplier.js/product.js
+            const table = tableBody.closest('table');
+            if (table) {
+                const thead = table.querySelector('thead');
+                if (thead) {
+                    thead.innerHTML = `
+                        <tr class="align-middle table-primary">
+                            <th class="text-center" scope="col" style="width: 80px;"><i class="bi bi-hash"></i></th>
+                            <th scope="col"><i class="bi bi-person me-2"></i>Tên khách hàng</th>
+                            <th class="text-center" scope="col" style="width: 200px;"><i class="bi bi-telephone me-2"></i>Số điện thoại</th>
+                            <th class="text-center" scope="col" style="width: 150px;"><i class="bi bi-gear me-2"></i>Thao tác</th>
+                        </tr>
+                    `;
+                }
+            }
+
+            tableBody.innerHTML = '';
+
+            CustomerModule.data.filteredCustomers.forEach(customer => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="text-center fw-bold">${customer.id}</td>
+                    <td class="text-start">
+                        <div class="fw-bold text-primary">${CustomerModule.utils.safeValue(customer.name)}</div>
+                    </td>
+                    <td class="text-center">
+                        <div class="d-flex align-items-center justify-content-center">
+                            <i class="bi bi-telephone me-2 text-success"></i>
+                            <span>${CustomerModule.utils.safeValue(customer.contact, 'Chưa có')}</span>
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-sm btn-outline-primary" onclick="CustomerModule.actions.edit(${customer.id})" 
+                                    title="Chỉnh sửa khách hàng">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="CustomerModule.actions.confirmDelete(${customer.id})"
+                                    title="Xóa khách hàng">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        },
+
+        // Render mobile cards
+        renderMobileCards() {
+            const mobileContainer = document.getElementById('customers-mobile-list');
+            if (!mobileContainer) return;
+
+            mobileContainer.innerHTML = '';
+
+            CustomerModule.data.filteredCustomers.forEach(customer => {
+                const card = document.createElement('div');
+                card.className = 'card mb-3 border-0 shadow-sm';
+                card.innerHTML = `
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <div class="fw-bold">
+                            <i class="bi bi-person me-2"></i>${CustomerModule.utils.safeValue(customer.name)}
+                        </div>
+                        <span class="badge bg-light text-dark">#${customer.id}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2 mb-3">
+                            <div class="col-12">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-telephone text-success me-2"></i>
+                                    <span class="text-muted">Liên hệ:</span>
+                                    <span class="ms-2">${CustomerModule.utils.safeValue(customer.contact, 'Chưa có')}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button class="btn btn-outline-primary btn-sm" onclick="CustomerModule.actions.edit(${customer.id})" 
+                                    title="Chỉnh sửa khách hàng">
+                                <i class="bi bi-pencil me-1"></i>Sửa
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="CustomerModule.actions.confirmDelete(${customer.id})"
+                                    title="Xóa khách hàng">
+                                <i class="bi bi-trash me-1"></i>Xóa
+                            </button>
+                        </div>
+                    </div>
+                `;
+                mobileContainer.appendChild(card);
+            });
+        },
+
+        // Show/hide no data messages
+        toggleNoDataMessages() {
+            const noCustomersMessage = document.getElementById('no-customers-message');
+            const noSearchResults = document.getElementById('no-customer-search-results');
+            const searchInput = document.getElementById('customer-search');
+
+            const hasData = CustomerModule.data.filteredCustomers.length > 0;
+            const hasSearchTerm = searchInput && searchInput.value.trim();
+
+            if (noCustomersMessage) {
+                noCustomersMessage.style.display = !hasData && !hasSearchTerm ? 'block' : 'none';
+            }
+
+            if (noSearchResults) {
+                noSearchResults.style.display = !hasData && hasSearchTerm ? 'block' : 'none';
+            }
+        },
+
+        // Main render function
+        async render() {
+            this.updateCount();
+            this.renderDesktopTable();
+            this.renderMobileCards();
+            this.toggleNoDataMessages();
+        },
+
+        // Show success message
+        showSuccess(message) {
+            // Create toast notification
+            const toastContainer = document.getElementById('toast-container') || this.createToastContainer();
+            
+            const toast = document.createElement('div');
+            toast.className = 'toast show align-items-center text-white bg-success border-0';
+            toast.setAttribute('role', 'alert');
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="bi bi-check-circle me-2"></i>${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        },
+
+        // Create toast container if not exists
+        createToastContainer() {
+            const container = document.createElement('div');
+            container.id = 'toast-container';
+            container.className = 'toast-container position-fixed top-0 end-0 p-3';
+            container.style.zIndex = '9999';
+            document.body.appendChild(container);
+            return container;
+        },
+
+        // Show validation errors
+        showErrors(errors) {
+            const existingModal = document.getElementById('customerValidationErrorModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            const modalHTML = `
+                <div class="modal fade" id="customerValidationErrorModal" tabindex="-1">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg">
+                            <div class="modal-header bg-danger text-white border-0">
+                                <h5 class="modal-title">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Lỗi nhập liệu
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body py-4">
+                                <div class="text-center mb-3">
+                                    <i class="bi bi-exclamation-triangle text-danger" style="font-size: 3rem;"></i>
+                                </div>
+                                <h6 class="text-center mb-3">Vui lòng kiểm tra lại thông tin:</h6>
+                                <ul class="list-unstyled">
+                                    ${errors.map(error => `<li class="mb-2"><i class="bi bi-x-circle text-danger me-2"></i>${error}</li>`).join('')}
+                                </ul>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            
+            const modal = new bootstrap.Modal(document.getElementById('customerValidationErrorModal'));
+            modal.show();
+            
+            document.getElementById('customerValidationErrorModal').addEventListener('hidden.bs.modal', function () {
+                this.remove();
+            });
+        }
+    },
+
+    // ===== FORM HANDLING =====
+    form: {
+        // Reset form to add mode
+        resetToAdd() {
+            const form = document.getElementById('customer-form');
+            const modalTitle = document.getElementById('customerModalLabel');
+            const submitButton = document.getElementById('customer-submit-btn');
+            
+            if (form) {
+                form.reset();
+                form.removeAttribute('data-edit-id');
+            }
+            
+            if (modalTitle) {
+                modalTitle.innerHTML = '<i class="bi bi-person me-2"></i>Thêm khách hàng mới';
+            }
+            
+            if (submitButton) {
+                submitButton.textContent = 'Lưu khách hàng';
+            }
+
+            this.clearValidationErrors();
+        },
+
+        // Setup for edit mode
+        setupEdit(customer) {
+            const form = document.getElementById('customer-form');
+            const modalTitle = document.getElementById('customerModalLabel');
+            const submitButton = document.getElementById('customer-submit-btn');
+            
+            if (form) {
+                form.setAttribute('data-edit-id', customer.id);
+            
+                document.getElementById('customer-name').value = customer.name || '';
+                document.getElementById('customer-contact').value = customer.contact || '';
+            }
+            
+            if (modalTitle) {
+                modalTitle.innerHTML = '<i class="bi bi-pencil me-2"></i>Chỉnh sửa khách hàng';
+            }
+            
+            if (submitButton) {
+                submitButton.textContent = 'Cập nhật khách hàng';
+            }
+            
+            this.clearValidationErrors();
+        },
+
+        // Clear validation errors
+        clearValidationErrors() {
+            const fields = ['customer-name', 'customer-contact'];
+            fields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.classList.remove('is-invalid', 'is-valid');
+                    const errorDiv = document.getElementById(`${fieldId}-error`);
+                    if (errorDiv) {
+                        errorDiv.remove();
+                    }
                 }
             });
-        }
-        
-        // Thêm sự kiện cho ô tìm kiếm
-        const searchInput = document.getElementById('customer-search');
-        if (searchInput) {
-            searchInput.addEventListener('input', async (e) => {
-                await searchCustomers(e.target.value.trim());
-            });
-        }
-        
-        console.log('Đã tạo ô tìm kiếm khách hàng thành công');
-    } catch (error) {
-        console.error('Lỗi khi tạo ô tìm kiếm khách hàng:', error);
-    }
-}
+        },
 
-// Tìm kiếm khách hàng
-async function searchCustomers(keyword) {
-    if (!keyword) {
-        // Nếu không có từ khóa, hiển thị tất cả khách hàng
-        await displayCustomers();
-        return;
-    }
-    
-    try {
-        // Đảm bảo DB đã sẵn sàng
-        const db = await waitForDB();
-        if (!db) {
-            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-        }
-        
-        // Lấy tất cả khách hàng từ IndexedDB
-        const tx = db.transaction('customers', 'readonly');
-        const store = tx.objectStore('customers');
-        const customers = await store.getAll();
-        
-        // Lọc khách hàng theo từ khóa (tên hoặc liên hệ)
-        const lowercaseKeyword = keyword.toLowerCase();
-        const filteredCustomers = customers.filter(customer => 
-            customer.name.toLowerCase().includes(lowercaseKeyword) || 
-            (customer.contact && customer.contact.toLowerCase().includes(lowercaseKeyword))
-        );
-        
-        // Hiển thị kết quả tìm kiếm
-        const customersList = document.getElementById('customers-list');
-        const noCustomersMessage = document.getElementById('no-customers-message');
-        
-        if (!customersList || !noCustomersMessage) return;
-        
-        // Xóa nội dung hiện tại
-        customersList.innerHTML = '';
-        
-        if (filteredCustomers.length > 0) {
-            // Ẩn thông báo không có dữ liệu
-            noCustomersMessage.style.display = 'none';
-            
-            // Hiển thị từng khách hàng
-            filteredCustomers.forEach(customer => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td class="text-center"><strong>${customer.id}</strong></td>
-                    <td><strong>${customer.name}</strong></td>
-                    <td>${customer.contact || '<em class="text-muted">Chưa có</em>'}</td>
-                    <td class="text-center">
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-primary edit-customer-btn" data-id="${customer.id}">
-                                <i class="bi bi-pencil"></i> Sửa
-                            </button>
-                            <button class="btn btn-outline-danger delete-customer-btn" data-id="${customer.id}">
-                                <i class="bi bi-trash"></i> Xóa
-                            </button>
-                        </div>
-                    </td>
-                `;
+        // Show field validation result
+        showFieldValidation(fieldId, validation) {
+            const field = document.getElementById(fieldId);
+            if (!field) return;
+
+            this.clearFieldValidation(fieldId);
+
+            if (!validation.valid) {
+                field.classList.add('is-invalid');
                 
-                customersList.appendChild(row);
-            });
-            
-            // Thêm sự kiện cho các nút chỉnh sửa
-            document.querySelectorAll('.edit-customer-btn').forEach(button => {
-                button.addEventListener('click', async (e) => {
-                    const customerId = parseInt(e.target.getAttribute('data-id'));
-                    await showEditCustomerForm(customerId);
-                });
-            });
-        } else {
-            // Hiển thị thông báo không có dữ liệu
-            noCustomersMessage.style.display = 'block';
-            noCustomersMessage.textContent = `Không tìm thấy khách hàng nào phù hợp với "${keyword}"`;
-        }
-    } catch (error) {
-        console.error('Lỗi khi tìm kiếm khách hàng:', error);
-        
-        // Hiển thị thông báo lỗi
-        const customersList = document.getElementById('customers-list');
-        if (customersList) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-danger mt-3';
-            alertElement.textContent = `Lỗi khi tìm kiếm: ${error.message}`;
-            customersList.parentNode.insertBefore(alertElement, customersList);
-            
-            setTimeout(() => {
-                alertElement.remove();
-            }, 5000);
-        }
-    }
-}
-
-// Thêm khách hàng mới
-async function addCustomer(customerData) {
-    try {
-        // Đảm bảo DB đã sẵn sàng
-        const db = await waitForDB();
-        if (!db) {
-            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-        }
-        
-        const tx = db.transaction('customers', 'readwrite');
-        const store = tx.objectStore('customers');
-        
-        const id = await store.add(customerData);
-        await tx.done;
-        
-        console.log('Đã thêm khách hàng mới với ID:', id);
-        
-        // Cập nhật giao diện
-        await displayCustomers();
-        await populateCustomerDropdowns();
-        
-        // Hiển thị thông báo thành công
-        const formElement = document.getElementById('customer-form');
-        if (formElement) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-success mt-3';
-            alertElement.textContent = `Đã thêm khách hàng "${customerData.name}" thành công!`;
-            
-            // Thêm thông báo vào sau form
-            formElement.parentNode.insertBefore(alertElement, formElement.nextSibling);
-            
-            // Tự động ẩn thông báo sau 3 giây
-            setTimeout(() => {
-                alertElement.remove();
-            }, 3000);
-        }
-        
-        return id;
-    } catch (error) {
-        console.error('Lỗi khi thêm khách hàng:', error);
-        
-        // Hiển thị thông báo lỗi
-        const formElement = document.getElementById('customer-form');
-        if (formElement) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-danger mt-3';
-            alertElement.textContent = `Lỗi khi thêm khách hàng: ${error.message}`;
-            
-            // Thêm thông báo vào sau form
-            formElement.parentNode.insertBefore(alertElement, formElement.nextSibling);
-            
-            // Tự động ẩn thông báo sau 5 giây
-            setTimeout(() => {
-                alertElement.remove();
-            }, 5000);
-        }
-        
-        return null;
-    }
-}
-
-// Hiển thị danh sách khách hàng
-async function displayCustomers() {
-    try {
-        const customersList = document.getElementById('customers-list');
-        const noCustomersMessage = document.getElementById('no-customers-message');
-        
-        if (!customersList || !noCustomersMessage) return;
-        
-        // Đảm bảo DB đã sẵn sàng
-        const db = await waitForDB();
-        if (!db) {
-            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-        }
-        
-        // Lấy tất cả khách hàng từ IndexedDB
-        const tx = db.transaction('customers', 'readonly');
-        const store = tx.objectStore('customers');
-        const customers = await store.getAll();
-        
-        // Xóa nội dung hiện tại
-        customersList.innerHTML = '';
-        
-        if (customers.length > 0) {
-            // Ẩn thông báo không có dữ liệu
-            noCustomersMessage.style.display = 'none';
-            
-            // Hiển thị từng khách hàng
-            customers.forEach(customer => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td class="text-center"><strong>${customer.id}</strong></td>
-                    <td><strong>${customer.name}</strong></td>
-                    <td>${customer.contact || '<em class="text-muted">Chưa có</em>'}</td>
-                    <td class="text-center">
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-primary edit-customer-btn" data-id="${customer.id}">
-                                <i class="bi bi-pencil"></i> Sửa
-                            </button>
-                            <button class="btn btn-outline-danger delete-customer-btn" data-id="${customer.id}">
-                                <i class="bi bi-trash"></i> Xóa
-                            </button>
-                        </div>
-                    </td>
-                `;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'invalid-feedback';
+                errorDiv.textContent = validation.message;
+                errorDiv.id = `${fieldId}-error`;
                 
-                customersList.appendChild(row);
-            });
-            
-            // Thêm sự kiện cho các nút chỉnh sửa
-            document.querySelectorAll('.edit-customer-btn').forEach(button => {
-                button.addEventListener('click', async (e) => {
-                    const customerId = parseInt(e.target.getAttribute('data-id'));
-                    await showEditCustomerForm(customerId);
-                });
-            });
-        } else {
-            // Hiển thị thông báo không có dữ liệu
-            noCustomersMessage.style.display = 'block';
-        }
-    } catch (error) {
-        console.error('Lỗi khi hiển thị khách hàng:', error);
-        
-        // Hiển thị thông báo lỗi
-        const customersList = document.getElementById('customers-list');
-        if (customersList) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-danger mt-3';
-            alertElement.textContent = `Lỗi khi hiển thị khách hàng: ${error.message}`;
-            customersList.parentNode.insertBefore(alertElement, customersList);
-            
-            setTimeout(() => {
-                alertElement.remove();
-            }, 5000);
-        }
-    }
-}
+                field.parentNode.appendChild(errorDiv);
+            } else {
+                field.classList.add('is-valid');
+            }
+        },
 
-// Xóa khách hàng
-async function deleteCustomer(customerId) {
-    try {
-        // Đảm bảo DB đã sẵn sàng
-        const db = await waitForDB();
-        if (!db) {
-            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-        }
-        
-        const tx = db.transaction('customers', 'readwrite');
-        const store = tx.objectStore('customers');
-        
-        await store.delete(customerId);
-        await tx.done;
-        
-        console.log('Đã xóa khách hàng với ID:', customerId);
-        
-        // Cập nhật giao diện
-        await displayCustomers();
-        await populateCustomerDropdowns();
-        
-        // Hiển thị thông báo thành công
-        const customersList = document.getElementById('customers-list');
-        if (customersList) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-success mt-3';
-            alertElement.textContent = 'Đã xóa khách hàng thành công!';
-            customersList.parentNode.insertBefore(alertElement, customersList);
+        // Clear field validation
+        clearFieldValidation(fieldId) {
+            const field = document.getElementById(fieldId);
+            if (!field) return;
+
+            field.classList.remove('is-invalid', 'is-valid');
             
+            const errorDiv = document.getElementById(`${fieldId}-error`);
+            if (errorDiv) {
+                errorDiv.remove();
+            }
+        },
+
+        // Setup real-time validation
+        setupRealTimeValidation() {
+            const fields = ['customer-name', 'customer-contact'];
+            
+            fields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    // Remove existing listeners
+                    field.removeEventListener('blur', this.handleFieldValidation);
+                    field.removeEventListener('input', this.handleFieldInput);
+                    
+                    // Add new listeners with proper binding
+                    field.addEventListener('blur', (event) => {
+                        this.handleFieldValidation(event);
+                    });
+                    field.addEventListener('input', (event) => {
+                        this.handleFieldInput(event);
+                    });
+                }
+            });
+        },
+
+        // Handle field validation on blur
+        handleFieldValidation(event) {
+            const fieldId = event.target.id;
+            const fieldName = fieldId.replace('customer-', '');
+            const value = event.target.value;
+            
+            const validation = CustomerModule.validation.validateField(fieldName, value);
+            CustomerModule.form.showFieldValidation(fieldId, validation);
+        },
+
+        // Handle field input (clear errors on typing)
+        handleFieldInput(event) {
+            const fieldId = event.target.id;
+            CustomerModule.form.clearFieldValidation(fieldId);
+        }
+    },
+
+    // ===== FILTER SYSTEM =====
+    filter: {
+        // Apply filters
+        apply() {
+            const searchTerm = document.getElementById('customer-search')?.value.toLowerCase().trim() || '';
+
+            CustomerModule.data.filteredCustomers = CustomerModule.data.currentCustomers.filter(customer => {
+                const matchesSearch = !searchTerm || 
+                    customer.name.toLowerCase().includes(searchTerm) ||
+                    (customer.contact && customer.contact.toLowerCase().includes(searchTerm));
+
+                return matchesSearch;
+            });
+
+            CustomerModule.ui.render();
+        }
+    },
+
+    // ===== USER ACTIONS =====
+    actions: {
+        // Add customer
+        async add() {
+            const form = document.getElementById('customer-form');
+            const formData = {
+                name: document.getElementById('customer-name').value.trim(),
+                contact: document.getElementById('customer-contact').value.trim()
+            };
+
+            // Clear validation errors
+            CustomerModule.form.clearValidationErrors();
+            
+            // Validate form
+            const validation = await CustomerModule.validation.validateForm(formData);
+            if (!validation.valid) {
+                CustomerModule.ui.showErrors(validation.errors);
+                return;
+            }
+
+            try {
+                const id = await CustomerModule.database.add(formData);
+                if (id) {
+                    // Close modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('customerModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
+
+                    // Reload and refresh
+                    await CustomerModule.database.loadAll();
+                    await CustomerModule.refresh();
+                    CustomerModule.ui.showSuccess('Thêm khách hàng thành công!');
+                }
+            } catch (error) {
+                CustomerModule.ui.showErrors([`Có lỗi xảy ra: ${error.message}`]);
+            }
+        },
+
+        // Edit customer
+        async edit(customerId) {
+            try {
+                const customer = await CustomerModule.database.get(customerId);
+                if (!customer) {
+                    CustomerModule.ui.showErrors(['Không tìm thấy thông tin khách hàng!']);
+                    return;
+                }
+
+                // Ensure modal is clean before opening
+                CustomerModule.utils.cleanupAllModals();
+                
+                // Small delay to ensure cleanup is complete
+                setTimeout(() => {
+                    CustomerModule.form.setupEdit(customer);
+                    
+                    // Verify modal exists before trying to show it
+                    const modal = document.getElementById('customerModal');
+                    if (modal) {
+                        try {
+                            const bsModal = new bootstrap.Modal(modal);
+                            bsModal.show();
+                        } catch (error) {
+                            console.error('❌ Error showing customer modal:', error);
+                            CustomerModule.ui.showErrors(['Có lỗi khi mở form chỉnh sửa. Vui lòng thử lại.']);
+                        }
+                    } else {
+                        console.error('❌ Customer modal element not found');
+                        CustomerModule.ui.showErrors(['Không tìm thấy form chỉnh sửa. Vui lòng tải lại trang.']);
+                    }
+                }, 100);
+            } catch (error) {
+                console.error('❌ Error in edit customer:', error);
+                CustomerModule.ui.showErrors(['Có lỗi khi chỉnh sửa khách hàng. Vui lòng thử lại.']);
+            }
+        },
+        
+        // Update customer
+        async update() {
+            const form = document.getElementById('customer-form');
+            const editId = parseInt(form.getAttribute('data-edit-id'));
+            
+            const formData = {
+                name: document.getElementById('customer-name').value.trim(),
+                contact: document.getElementById('customer-contact').value.trim()
+            };
+
+            // Clear validation errors
+            CustomerModule.form.clearValidationErrors();
+
+            // Validate form
+            const validation = await CustomerModule.validation.validateForm(formData, editId);
+            if (!validation.valid) {
+                CustomerModule.ui.showErrors(validation.errors);
+                return;
+            }
+
+            try {
+                const success = await CustomerModule.database.update(editId, formData);
+                if (success) {
+                    // Close modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('customerModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
+
+                    // Reload and refresh
+                    await CustomerModule.database.loadAll();
+                    await CustomerModule.refresh();
+                    CustomerModule.ui.showSuccess('Cập nhật khách hàng thành công!');
+                }
+    } catch (error) {
+                CustomerModule.ui.showErrors([`Có lỗi xảy ra: ${error.message}`]);
+            }
+        },
+
+        // Confirm delete
+        confirmDelete(customerId) {
+            const customer = CustomerModule.data.currentCustomers.find(c => c.id === customerId);
+            if (!customer) return;
+
+            CustomerModule.data.customerToDelete = customer;
+
+            // Update delete modal content
+            const nameElement = document.getElementById('delete-customer-name');
+            const detailsElement = document.getElementById('delete-customer-details');
+
+            if (nameElement) nameElement.textContent = customer.name;
+            if (detailsElement) {
+                detailsElement.textContent = customer.contact || 'Chưa có số điện thoại';
+            }
+
+            // Show delete modal
+            const deleteModal = new bootstrap.Modal(document.getElementById('deleteCustomerModal'));
+            deleteModal.show();
+        },
+
+        // Delete customer
+        async delete() {
+            const customer = CustomerModule.data.customerToDelete;
+            if (!customer) return;
+
+            try {
+                const success = await CustomerModule.database.delete(customer.id);
+                if (success) {
+                    // Close modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('deleteCustomerModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
+
+                    // Reload and refresh
+                    await CustomerModule.database.loadAll();
+                    await CustomerModule.refresh();
+                    CustomerModule.ui.showSuccess('Xóa khách hàng thành công!');
+                }
+            } catch (error) {
+                CustomerModule.ui.showErrors([`Có lỗi xảy ra khi xóa: ${error.message}`]);
+            } finally {
+                CustomerModule.data.customerToDelete = null;
+            }
+        },
+
+        // Handle form submit
+        async handleFormSubmit(event) {
+            event.preventDefault();
+            
+            const form = document.getElementById('customer-form');
+            const submitButton = document.getElementById('customer-submit-btn');
+            
+            // Prevent multiple submissions
+            if (submitButton.disabled) {
+                console.log('⚠️ Customer form already submitting, skipping...');
+                return;
+            }
+
+            // Disable submit button during processing
+            const originalText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Đang xử lý...';
+            
+            try {
+                const editId = form.getAttribute('data-edit-id');
+                
+                if (editId) {
+                    await this.update();
+                } else {
+                    await this.add();
+                }
+            } finally {
+                // Re-enable submit button
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+            }
+        },
+
+        // Refresh data
+        async refresh() {
+            await CustomerModule.database.loadAll();
+            CustomerModule.filter.apply();
+            
+            // Update dropdowns in other modules if needed
+            if (window.populateCustomerDropdowns) {
+                await window.populateCustomerDropdowns();
+            }
+        }
+    },
+
+    // ===== EVENT LISTENERS =====
+    events: {
+        // Track if events are already setup
+        initialized: false,
+
+        // Remove existing event listeners
+        cleanup() {
+            const addBtn = document.getElementById('add-customer-btn');
+            const refreshBtn = document.getElementById('refresh-customers-btn');
+            const searchInput = document.getElementById('customer-search');
+            const customerForm = document.getElementById('customer-form');
+            const confirmDeleteBtn = document.getElementById('confirm-delete-customer');
+
+            // Remove existing listeners
+            if (addBtn) addBtn.replaceWith(addBtn.cloneNode(true));
+            if (refreshBtn) refreshBtn.replaceWith(refreshBtn.cloneNode(true));
+            if (searchInput) searchInput.replaceWith(searchInput.cloneNode(true));
+            if (customerForm) customerForm.replaceWith(customerForm.cloneNode(true));
+            if (confirmDeleteBtn) confirmDeleteBtn.replaceWith(confirmDeleteBtn.cloneNode(true));
+        },
+
+        // Setup all event listeners
+        setup() {
+            // Prevent multiple initialization
+            if (this.initialized) {
+                console.log('⚠️ Customer event listeners already initialized, skipping...');
+                return;
+            }
+
+            // Cleanup any existing listeners
+            this.cleanup();
+
+            // Add customer button
+            const addBtn = document.getElementById('add-customer-btn');
+            if (addBtn) {
+                addBtn.addEventListener('click', (event) => {
+                    // Prevent any default behavior
+                    event.preventDefault();
+                    
+                    // Clean up any existing modals first
+                    CustomerModule.utils.cleanupAllModals();
+                    
+                    // Small delay to ensure cleanup is complete
+                    setTimeout(() => {
+                        CustomerModule.form.resetToAdd();
+                        
+                        // Show modal safely
+                        const modal = document.getElementById('customerModal');
+                        if (modal) {
+                            try {
+                                const bsModal = new bootstrap.Modal(modal);
+                                bsModal.show();
+    } catch (error) {
+                                console.error('❌ Error showing add customer modal:', error);
+                                CustomerModule.ui.showErrors(['Có lỗi khi mở form thêm khách hàng. Vui lòng thử lại.']);
+                            }
+                        } else {
+                            console.error('❌ Customer modal element not found');
+                            CustomerModule.ui.showErrors(['Không tìm thấy form thêm khách hàng. Vui lòng tải lại trang.']);
+                        }
+                    }, 100);
+                });
+            }
+
+            // Refresh button
+            const refreshBtn = document.getElementById('refresh-customers-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', async () => {
+                    await CustomerModule.actions.refresh();
+                    
+                    // Loading animation
+                    refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-2 spin"></i>Đang tải...';
             setTimeout(() => {
-                alertElement.remove();
-            }, 3000);
+                        refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Làm mới';
+                    }, 1000);
+                });
+            }
+
+            // Search input
+            const searchInput = document.getElementById('customer-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', () => {
+                    CustomerModule.filter.apply();
+                });
+            }
+
+            // Form submit
+            const customerForm = document.getElementById('customer-form');
+            if (customerForm) {
+                customerForm.addEventListener('submit', (event) => {
+                    CustomerModule.actions.handleFormSubmit(event);
+                });
+            }
+
+            // Delete confirmation
+            const confirmDeleteBtn = document.getElementById('confirm-delete-customer');
+            if (confirmDeleteBtn) {
+                confirmDeleteBtn.addEventListener('click', () => {
+                    CustomerModule.actions.delete();
+                });
+            }
+        
+            // Modal events
+            const customerModal = document.getElementById('customerModal');
+            if (customerModal) {
+                customerModal.addEventListener('show.bs.modal', (event) => {
+                    console.log('🎯 Customer modal opening...');
+                    
+                    // Setup real-time validation
+                    CustomerModule.form.setupRealTimeValidation();
+                    
+                    // Ensure modal is properly initialized
+                    setTimeout(() => {
+                        const firstField = document.getElementById('customer-name');
+                        if (firstField) {
+                            firstField.focus();
+                        }
+                    }, 300);
+                });
+                
+                customerModal.addEventListener('shown.bs.modal', (event) => {
+                    console.log('✅ Customer modal opened successfully');
+                });
+                
+                customerModal.addEventListener('hide.bs.modal', (event) => {
+                    console.log('🔄 Customer modal closing...');
+                });
+                
+                customerModal.addEventListener('hidden.bs.modal', (event) => {
+                    console.log('✅ Customer modal closed');
+                    
+                    // Reset form and clear validation
+                    CustomerModule.form.resetToAdd();
+                    CustomerModule.form.clearValidationErrors();
+                    
+                    // Cleanup with delay to ensure modal is fully hidden
+                    setTimeout(() => {
+                        CustomerModule.utils.cleanupAllModals();
+                    }, 150);
+                });
+            }
+
+            const deleteModal = document.getElementById('deleteCustomerModal');
+            if (deleteModal) {
+                deleteModal.addEventListener('hidden.bs.modal', (event) => {
+                    console.log('✅ Delete customer modal closed');
+                    
+                    // Clear delete data
+                    CustomerModule.data.customerToDelete = null;
+                    
+                    // Cleanup with delay
+            setTimeout(() => {
+                        CustomerModule.utils.cleanupAllModals();
+                    }, 150);
+                });
+            }
+
+            // Mark as initialized
+            this.initialized = true;
+            console.log('✅ Customer event listeners setup complete');
+        }
+    },
+
+    // ===== PUBLIC API =====
+    // Track initialization state
+    isInitialized: false,
+
+    // Verify modal elements exist
+    verifyModalElements() {
+        const customerModal = document.getElementById('customerModal');
+        const deleteModal = document.getElementById('deleteCustomerModal');
+        
+        if (!customerModal) {
+            console.error('❌ Customer modal element not found in DOM');
+            return false;
         }
         
+        if (!deleteModal) {
+            console.error('❌ Delete customer modal element not found in DOM');
+            return false;
+        }
+        
+        console.log('✅ Customer modal elements verified');
         return true;
-    } catch (error) {
-        console.error('Lỗi khi xóa khách hàng:', error);
-        
-        // Hiển thị thông báo lỗi
-        const customersList = document.getElementById('customers-list');
-        if (customersList) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-danger mt-3';
-            alertElement.textContent = `Lỗi khi xóa khách hàng: ${error.message}`;
-            customersList.parentNode.insertBefore(alertElement, customersList);
+    },
+
+    // Initialize module
+    async init() {
+        try {
+            // Prevent multiple initialization
+            if (this.isInitialized) {
+                console.log('⚠️ Customer module already initialized, skipping...');
+                return true;
+            }
+
+            console.log('🎯 Initializing Customer Management Module...');
             
-            setTimeout(() => {
-                alertElement.remove();
-            }, 5000);
+            // Verify modal elements exist
+            if (!this.verifyModalElements()) {
+                console.error('❌ Modal elements not ready, delaying initialization...');
+                // Retry after a short delay
+                setTimeout(() => this.init(), 500);
+                return false;
+            }
+            
+            // Cleanup any existing modals
+            this.utils.cleanupAllModals();
+            
+            // Wait for database
+            const db = await this.utils.waitForDB();
+            if (!db) {
+                console.error('❌ Database not ready for customer module');
+                return false;
+            }
+
+            // Load data
+            await this.database.loadAll();
+            
+            // Setup event listeners
+            this.events.setup();
+            
+            // Initial render
+            await this.ui.render();
+            
+            // Mark as initialized
+            this.isInitialized = true;
+            
+            console.log('✅ Customer Management Module initialized successfully');
+            return true;
+        } catch (error) {
+            console.error('❌ Error initializing customer module:', error);
+            return false;
         }
+    },
+
+    // Refresh everything
+    async refresh() {
+        await this.database.loadAll();
+        this.filter.apply();
         
-        return false;
+        // Update dropdowns in other modules
+        if (window.populateCustomerDropdowns) {
+            await window.populateCustomerDropdowns();
+        }
+    }
+};
+        
+// ===== LEGACY FUNCTIONS FOR BACKWARD COMPATIBILITY =====
+// These functions maintain compatibility with existing code
+
+async function addCustomer(customerData) {
+    return await CustomerModule.database.add(customerData);
+}
+
+async function updateCustomer(customerId, customerData) {
+    return await CustomerModule.database.update(customerId, customerData);
+}
+
+async function deleteCustomer(customerId) {
+    return await CustomerModule.database.delete(customerId);
+}
+
+async function getCustomerById(customerId) {
+    return await CustomerModule.database.get(customerId);
+}
+
+async function displayCustomers() {
+    await CustomerModule.database.loadAll();
+    await CustomerModule.ui.render();
+}
+
+async function searchCustomers(keyword) {
+    const searchInput = document.getElementById('customer-search');
+    if (searchInput) {
+        searchInput.value = keyword;
+        CustomerModule.filter.apply();
     }
 }
 
-// Đổ danh sách khách hàng vào các dropdown
 async function populateCustomerDropdowns() {
     try {
         // Đảm bảo DB đã sẵn sàng
-        const db = await waitForDB();
+        const db = await CustomerModule.utils.waitForDB();
         if (!db) {
             throw new Error('Không thể kết nối đến cơ sở dữ liệu');
         }
@@ -498,249 +1245,68 @@ async function populateCustomerDropdowns() {
             }
         }
     } catch (error) {
-        console.error('Lỗi khi đổ danh sách khách hàng vào dropdown:', error);
-        
-        // Hiển thị thông báo lỗi ở nơi phù hợp
-        const orderForm = document.getElementById('order-form');
-        if (orderForm) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-danger mt-3';
-            alertElement.textContent = `Lỗi khi tải danh sách khách hàng: ${error.message}`;
-            orderForm.insertBefore(alertElement, orderForm.firstChild);
-            
-            setTimeout(() => {
-                alertElement.remove();
-            }, 5000);
-        }
+        console.error('❌ Error populating customer dropdowns:', error);
     }
 }
 
-// Lấy thông tin khách hàng theo ID
-async function getCustomerById(customerId) {
-    try {
-        // Đảm bảo DB đã sẵn sàng
-        const db = await waitForDB();
-        if (!db) {
-            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-        }
-        
-        const tx = db.transaction('customers', 'readonly');
-        const store = tx.objectStore('customers');
-        
-        const customer = await store.get(customerId);
-        return customer;
-    } catch (error) {
-        console.error('Lỗi khi lấy thông tin khách hàng:', error);
-        
-        // Hiển thị thông báo lỗi
-        const formElement = document.getElementById('customer-form');
-        if (formElement) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-danger mt-3';
-            alertElement.textContent = `Lỗi khi lấy thông tin khách hàng: ${error.message}`;
-            formElement.parentNode.insertBefore(alertElement, formElement.nextSibling);
-            
-            setTimeout(() => {
-                alertElement.remove();
-            }, 5000);
-        }
-        
-        return null;
-    }
-}
-
-// Hiển thị form chỉnh sửa khách hàng
 async function showEditCustomerForm(customerId) {
-    try {
-        // Đảm bảo DB đã sẵn sàng
-        const db = await waitForDB();
-        if (!db) {
-            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-        }
-        
-        // Lấy thông tin khách hàng
-        const customer = await getCustomerById(customerId);
-        if (!customer) {
-            alert('Không tìm thấy thông tin khách hàng!');
-            return;
-        }
-        
-        // Chuyển form thêm khách hàng thành form sửa khách hàng
-        const form = document.getElementById('customer-form');
-        const formTitle = form.closest('.card').querySelector('.card-title');
-        const submitButton = form.querySelector('button[type="submit"]');
-        
-        // Lưu ID khách hàng vào form
-        form.setAttribute('data-edit-id', customerId);
-        
-        // Cập nhật tiêu đề và nút
-        formTitle.textContent = 'Chỉnh sửa khách hàng';
-        submitButton.textContent = 'Cập nhật';
-        
-        // Điền dữ liệu vào form
-        document.getElementById('customer-name').value = customer.name;
-        document.getElementById('customer-contact').value = customer.contact || '';
-        
-        // Thêm nút hủy
-        const cancelButton = document.createElement('button');
-        cancelButton.type = 'button';
-        cancelButton.className = 'btn btn-secondary mt-2';
-        cancelButton.textContent = 'Hủy';
-        cancelButton.id = 'cancel-edit-btn';
-        cancelButton.onclick = resetCustomerForm;
-        
-        submitButton.parentNode.insertBefore(cancelButton, submitButton.nextSibling);
-        
-        // Focus vào ô tên
-        document.getElementById('customer-name').focus();
-    } catch (error) {
-        console.error('Lỗi khi hiển thị form chỉnh sửa khách hàng:', error);
-        
-        // Hiển thị thông báo lỗi
-        const formElement = document.getElementById('customer-form');
-        if (formElement) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-danger mt-3';
-            alertElement.textContent = `Lỗi khi hiển thị form chỉnh sửa: ${error.message}`;
-            formElement.parentNode.insertBefore(alertElement, formElement.nextSibling);
-            
-            setTimeout(() => {
-                alertElement.remove();
-            }, 5000);
-        }
-    }
+    await CustomerModule.actions.edit(customerId);
 }
 
-// Cập nhật thông tin khách hàng
-async function updateCustomer(customerId, customerData) {
-    try {
-        // Đảm bảo DB đã sẵn sàng
-        const db = await waitForDB();
-        if (!db) {
-            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-        }
-        
-        const tx = db.transaction('customers', 'readwrite');
-        const store = tx.objectStore('customers');
-        
-        // Lấy khách hàng hiện tại
-        const existingCustomer = await store.get(customerId);
-        if (!existingCustomer) {
-            throw new Error('Không tìm thấy khách hàng để cập nhật');
-        }
-        
-        // Cập nhật thông tin
-        const updatedCustomer = { ...existingCustomer, ...customerData };
-        await store.put(updatedCustomer);
-        await tx.done;
-        
-        console.log('Đã cập nhật khách hàng với ID:', customerId);
-        
-        // Cập nhật giao diện
-        await displayCustomers();
-        await populateCustomerDropdowns();
-        
-        // Reset form về trạng thái thêm mới
-        resetCustomerForm();
-        
-        // Hiển thị thông báo thành công
-        const formElement = document.getElementById('customer-form');
-        if (formElement) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-success mt-3';
-            alertElement.textContent = `Đã cập nhật thông tin khách hàng "${updatedCustomer.name}" thành công!`;
-            
-            // Thêm thông báo vào sau form
-            formElement.parentNode.insertBefore(alertElement, formElement.nextSibling);
-            
-            // Tự động ẩn thông báo sau 3 giây
-            setTimeout(() => {
-                alertElement.remove();
-            }, 3000);
-        }
-        
-        return customerId;
-    } catch (error) {
-        console.error('Lỗi khi cập nhật khách hàng:', error);
-        
-        // Hiển thị thông báo lỗi
-        const formElement = document.getElementById('customer-form');
-        if (formElement) {
-            const alertElement = document.createElement('div');
-            alertElement.className = 'alert alert-danger mt-3';
-            alertElement.textContent = `Lỗi khi cập nhật khách hàng: ${error.message}`;
-            
-            // Thêm thông báo vào sau form
-            formElement.parentNode.insertBefore(alertElement, formElement.nextSibling);
-            
-            // Tự động ẩn thông báo sau 5 giây
-            setTimeout(() => {
-                alertElement.remove();
-            }, 5000);
-        }
-        
-        return null;
-    }
-}
-
-// Khôi phục form về trạng thái thêm mới
 function resetCustomerForm() {
-    try {
-        const form = document.getElementById('customer-form');
-        const formTitle = form.closest('.card').querySelector('.card-title');
-        const submitButton = form.querySelector('button[type="submit"]');
-        
-        // Xóa ID khách hàng đang chỉnh sửa
-        form.removeAttribute('data-edit-id');
-        
-        // Cập nhật tiêu đề và nút
-        formTitle.textContent = 'Thêm khách hàng mới';
-        submitButton.textContent = 'Thêm';
-        
-        // Xóa dữ liệu trong form
-        form.reset();
-        
-        // Xóa nút hủy nếu có
-        const cancelButton = document.getElementById('cancel-edit-btn');
-        if (cancelButton) {
-            cancelButton.remove();
-        }
-        
-        // Focus vào ô tên
-        document.getElementById('customer-name').focus();
-        
-        console.log('Đã khôi phục form về trạng thái thêm mới');
-    } catch (error) {
-        console.error('Lỗi khi khôi phục form:', error);
-    }
+    CustomerModule.form.resetToAdd();
 }
 
-// Hàm khởi động module khách hàng - có thể gọi từ script.js
+function setupCustomerEventListeners() {
+    // Legacy function - now handled by module
+    console.log('📞 setupCustomerEventListeners called - using modern module');
+}
+
+function createCustomerSearchBox() {
+    // Legacy function - search is now part of modern UI
+    console.log('📞 createCustomerSearchBox called - using modern module UI');
+}
+
+// Wait for database function
+async function waitForDB() {
+    return await CustomerModule.utils.waitForDB();
+}
+
+// ===== MODULE INITIALIZATION =====
 window.loadCustomerModule = async function() {
     try {
-        // Đảm bảo DB đã sẵn sàng trước khi thực hiện bất kỳ thao tác nào
-        const db = await waitForDB();
-        if (!db) {
-            console.error('Không thể khởi tạo module khách hàng: Database chưa sẵn sàng');
-            return false;
+        // Prevent multiple initialization
+        if (window.customerModuleLoaded) {
+            console.log('⚠️ Customer module already loaded, skipping...');
+            return true;
+        }
+
+        const success = await CustomerModule.init();
+        
+        if (success) {
+            // Register global functions for other modules
+            window.populateCustomerDropdowns = populateCustomerDropdowns;
+            
+            // Export module globally for debugging
+            window.CustomerModule = CustomerModule;
+            
+            // Mark as loaded globally
+            window.customerModuleLoaded = true;
+        
+            console.log('🚀 Customer Module ready and global functions registered');
         }
         
-        // Tạo ô tìm kiếm nếu cần
-        createCustomerSearchBox();
-        
-        // Hiển thị danh sách khách hàng
-        await displayCustomers();
-        
-        // Đổ danh sách khách hàng vào dropdown
-        await populateCustomerDropdowns();
-        
-        // Đăng ký hàm populate làm global
-        window.populateCustomerDropdowns = populateCustomerDropdowns;
-        
-        console.log('Module khách hàng đã khởi tạo thành công');
-        return true;
+        return success;
     } catch (error) {
-        console.error('Lỗi khi khởi tạo module khách hàng:', error);
+        console.error('❌ Failed to load customer module:', error);
         return false;
     }
 };
+
+// Auto-initialize if DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', window.loadCustomerModule);
+} else {
+    // DOM already loaded
+    setTimeout(window.loadCustomerModule, 100);
+}
