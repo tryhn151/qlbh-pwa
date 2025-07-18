@@ -410,8 +410,15 @@ function setupEventListeners() {
                     }
                 }
             } catch (error) {
-                console.error('Lỗi khi chuyển tab:', error);
-            } finally {
+        if (error.name === 'AbortError') {
+            // This error can happen if the user switches tabs quickly,
+            // causing the database operation of the previous tab to be aborted.
+            // It's generally safe to ignore.
+            console.log('Data loading aborted by user action (tab switch).');
+        } else {
+            console.error('Lỗi khi chuyển tab:', error);
+        }
+    } finally {
                 isTabLoading = false;
             }
         });

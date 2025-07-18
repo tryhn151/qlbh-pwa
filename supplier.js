@@ -105,17 +105,46 @@ const SupplierModule = {
         // Clean up modals
         cleanupAllModals() {
             try {
+                // Kiểm tra document.body tồn tại
+                if (!document.body) {
+                    console.log('⚠️ Document body not available for modal cleanup');
+                    return;
+                }
+
+                // Remove modal backdrops
                 const backdrops = document.querySelectorAll('.modal-backdrop');
-                backdrops.forEach(backdrop => backdrop.remove());
+                backdrops.forEach(backdrop => {
+                    try {
+                        if (backdrop && backdrop.parentNode) {
+                            backdrop.remove();
+                        }
+                    } catch (error) {
+                        console.log('⚠️ Error removing backdrop:', error);
+                    }
+                });
                 
-                document.body.classList.remove('modal-open');
-                document.body.style.removeProperty('padding-right');
+                // Remove modal-open class and padding
+                try {
+                    document.body.classList.remove('modal-open');
+                    if (document.body.style) {
+                        document.body.style.removeProperty('padding-right');
+                    }
+                } catch (error) {
+                    console.log('⚠️ Error cleaning body styles:', error);
+                }
                 
+                // Dispose modal instances
                 const modalElements = document.querySelectorAll('.modal');
                 modalElements.forEach(modalEl => {
-                    const instance = bootstrap.Modal.getInstance(modalEl);
-                    if (instance) {
-                        instance.dispose();
+                    try {
+                        if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                            const instance = bootstrap.Modal.getInstance(modalEl);
+                            if (instance) {
+                                instance.dispose();
+                            }
+                        }
+                    } catch (error) {
+                        console.log('⚠️ Error disposing modal instance:', error);
                     }
                 });
                 
@@ -994,10 +1023,8 @@ const SupplierModule = {
             // Add supplier button
             const addBtn = document.getElementById('add-supplier-btn');
             if (addBtn) {
-                addBtn.addEventListener('click', () => {
-                    SupplierModule.utils.cleanupAllModals();
-                    SupplierModule.form.resetToAdd();
-                });
+                // The modal is now opened via data-bs-toggle attributes, not custom JS
+                // We will use the 'show.bs.modal' event to prepare the form
             }
 
             // Refresh button
@@ -1049,27 +1076,50 @@ const SupplierModule = {
             // Modal events
             const supplierModal = document.getElementById('supplierModal');
             if (supplierModal) {
-                supplierModal.addEventListener('show.bs.modal', () => {
-                    SupplierModule.form.setupRealTimeValidation();
-                    
-                    setTimeout(() => {
-                        const firstField = document.getElementById('supplier-name');
-                        if (firstField) firstField.focus();
-                    }, 300);
+                supplierModal.addEventListener('show.bs.modal', (event) => {
+                    try {
+                        const button = event.relatedTarget; // Button that triggered the modal
+                        const action = button.getAttribute('data-bs-action');
+
+                        if (action === 'add') {
+                            SupplierModule.form.resetToAdd();
+                        }
+
+                        SupplierModule.form.setupRealTimeValidation();
+                        
+                        setTimeout(() => {
+                            const firstField = document.getElementById('supplier-name');
+                            if (firstField) firstField.focus();
+                        }, 300);
+                    } catch (error) {
+                        console.error('❌ Error in modal show event:', error);
+                    }
                 });
                 
                 supplierModal.addEventListener('hidden.bs.modal', () => {
-                    SupplierModule.form.resetToAdd();
-                    SupplierModule.form.clearValidationErrors();
-                    setTimeout(SupplierModule.utils.cleanupAllModals, 100);
+                    try {
+                        SupplierModule.form.resetToAdd();
+                        SupplierModule.form.clearValidationErrors();
+                        setTimeout(() => {
+                            SupplierModule.utils.cleanupAllModals();
+                        }, 100);
+                    } catch (error) {
+                        console.error('❌ Error in modal hidden event:', error);
+                    }
                 });
             }
 
             const deleteModal = document.getElementById('deleteSupplierModal');
             if (deleteModal) {
                 deleteModal.addEventListener('hidden.bs.modal', () => {
-                    SupplierModule.data.supplierToDelete = null;
-                    setTimeout(SupplierModule.utils.cleanupAllModals, 100);
+                    try {
+                        SupplierModule.data.supplierToDelete = null;
+                        setTimeout(() => {
+                            SupplierModule.utils.cleanupAllModals();
+                        }, 100);
+                    } catch (error) {
+                        console.error('❌ Error in delete modal hidden event:', error);
+                    }
                 });
             }
 

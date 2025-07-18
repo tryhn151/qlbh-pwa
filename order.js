@@ -1963,35 +1963,31 @@ const OrderModule = {
     // Initialize module
     async init() {
         try {
-            // Prevent multiple initialization
+            // If module is already initialized, just refresh its data
             if (this.isInitialized) {
-                console.log('⚠️ Order module already initialized, skipping...');
+                console.log('🔄 Order module already loaded, refreshing data...');
+                await this.actions.refresh();
                 return true;
             }
 
+            // Full initialization on first load
             console.log('🎯 Initializing Order Management Module...');
             
-            // Cleanup any existing modals
             this.utils.cleanupAllModals();
             
-            // Wait for database
             const db = await this.utils.waitForDB();
             if (!db) {
                 console.error('❌ Database not ready for order module');
                 return false;
             }
 
-            // Load data
             await this.database.loadAll();
             await this.database.loadRelatedData();
             
-            // Setup event listeners
             this.events.setup();
             
-            // Initial render
             await this.ui.render();
             
-            // Mark as initialized
             this.isInitialized = true;
             
             console.log('✅ Order Management Module initialized successfully');
