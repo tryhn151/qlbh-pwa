@@ -6,20 +6,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Khởi tạo ứng dụng
 async function initApp() {
-    // Đăng ký Service Worker
-    registerServiceWorker();
+    try {
+        // Đăng ký Service Worker
+        registerServiceWorker();
 
-    // Khởi tạo IndexedDB
-    await initDB();
+        // Khởi tạo IndexedDB
+        await initDB();
 
-    // Hiển thị dữ liệu ban đầu
-    await loadInitialData();
+        // Hiển thị dữ liệu ban đầu
+        await loadInitialData();
 
-    // Thiết lập các event listener
-    setupEventListeners();
+        // Thiết lập các event listener
+        setupEventListeners();
 
-    // Thiết lập ngày hiện tại cho các trường ngày
-    setDefaultDates();
+        // Thiết lập ngày hiện tại cho các trường ngày
+        setDefaultDates();
+        
+        console.log('✅ Ứng dụng đã được khởi tạo thành công');
+    } catch (error) {
+        console.error('❌ Lỗi khi khởi tạo ứng dụng:', error);
+        
+        // Retry sau 2 giây nếu có lỗi
+        setTimeout(() => {
+            console.log('🔄 Thử khởi tạo lại ứng dụng...');
+            initApp();
+        }, 2000);
+    }
 }
 
 // Tải dữ liệu ban đầu
@@ -43,7 +55,9 @@ async function loadInitialData() {
         if (typeof window.loadProductModule === 'function') {
             await window.loadProductModule();
             // Đảm bảo populate supplier dropdown cho form sản phẩm
-            await populateSupplierDropdowns();
+            if (typeof populateSupplierDropdowns === 'function') {
+                await populateSupplierDropdowns();
+            }
         } else {
             console.warn('Module sản phẩm chưa sẵn sàng - sẽ được khởi tạo sau');
         }
@@ -54,7 +68,9 @@ async function loadInitialData() {
         } else {
             console.warn('Module đơn hàng chưa sẵn sàng - sẽ được khởi tạo sau');
             // Hiển thị danh sách đơn hàng (fallback cũ)
-            await displayOrders();
+            if (typeof displayOrders === 'function') {
+                await displayOrders();
+            }
         }
 
         // Tải module chuyến hàng nếu hàm có sẵn
@@ -63,11 +79,17 @@ async function loadInitialData() {
         } else {
             console.warn('Module chuyến hàng chưa sẵn sàng - sẽ được khởi tạo sau');
             // Hiển thị danh sách chuyến hàng (fallback cũ)
-        await displayTrips();
+            if (typeof displayTrips === 'function') {
+                await displayTrips();
+            }
         }
 
         // Hiển thị danh sách thanh toán
-        await displayPayments();
+        if (typeof displayPayments === 'function') {
+            await displayPayments();
+        } else {
+            console.warn('Function displayPayments chưa sẵn sàng - sẽ được khởi tạo sau');
+        }
 
         // Tải module công nợ nếu hàm có sẵn
         if (typeof window.loadDebtModule === 'function') {
@@ -77,7 +99,11 @@ async function loadInitialData() {
         }
 
         // Hiển thị báo cáo
-        await displayReports();
+        if (typeof displayReports === 'function') {
+            await displayReports();
+        } else {
+            console.warn('Function displayReports chưa sẵn sàng - sẽ được khởi tạo sau');
+        }
 
         // Thiết lập các event listener cho báo cáo
         if (typeof setupReportEventListeners === 'function') {
@@ -87,10 +113,20 @@ async function loadInitialData() {
         // Đảm bảo tất cả dropdown được populate sau khi load xong
         setTimeout(async () => {
             console.log('Đang populate tất cả dropdowns sau khi load xong...');
-            await populateSupplierDropdowns();
-            await populateProductDropdowns();
-            await populateCustomerDropdowns();
-            console.log('Đã hoàn thành populate tất cả dropdowns');
+            try {
+                if (typeof populateSupplierDropdowns === 'function') {
+                    await populateSupplierDropdowns();
+                }
+                if (typeof populateProductDropdowns === 'function') {
+                    await populateProductDropdowns();
+                }
+                if (typeof populateCustomerDropdowns === 'function') {
+                    await populateCustomerDropdowns();
+                }
+                console.log('Đã hoàn thành populate tất cả dropdowns');
+            } catch (error) {
+                console.error('Lỗi khi populate dropdowns:', error);
+            }
         }, 1000);
     } catch (error) {
         console.error('Lỗi khi tải dữ liệu ban đầu:', error);
@@ -365,10 +401,8 @@ function setupEventListeners() {
                     await window.loadProductModule();
                     // Đảm bảo populate dropdown được gọi sau khi load
                     await populateProductDropdowns();
-                    // Sử dụng function riêng cho product supplier dropdown
-                    if (typeof window.populateProductSupplierDropdownsWithRetry === 'function') {
-                        await window.populateProductSupplierDropdownsWithRetry();
-                    } else if (typeof window.populateProductSupplierDropdowns === 'function') {
+                    // Cập nhật supplier dropdown với dữ liệu mới nhất
+                    if (typeof window.populateProductSupplierDropdowns === 'function') {
                         await window.populateProductSupplierDropdowns();
                     }
                 }
@@ -380,6 +414,12 @@ function setupEventListeners() {
                     // Đảm bảo populate dropdown được gọi sau khi load
                     await populateSupplierDropdowns();
                     await populateCustomerDropdowns();
+                    
+                    // Cập nhật dropdown với dữ liệu mới nhất
+                    if (window.OrderModule && window.OrderModule.businessLogic) {
+                        await window.OrderModule.businessLogic.populateCustomerDropdown();
+                        await window.OrderModule.businessLogic.populateSupplierDropdowns();
+                    }
                 }
 
                 // Nếu là tab chuyến hàng
@@ -907,4 +947,15 @@ async function populateCustomerDropdowns() {
     } catch (error) {
         console.error('Lỗi khi populate dropdown khách hàng:', error);
     }
+}
+
+// Khởi tạo ứng dụng khi DOM đã sẵn sàng
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        // Thêm delay để đảm bảo tất cả script đã load
+        setTimeout(initApp, 500);
+    });
+} else {
+    // Thêm delay để đảm bảo tất cả script đã load
+    setTimeout(initApp, 500);
 }

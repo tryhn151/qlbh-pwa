@@ -1375,6 +1375,9 @@ const ProductModule = {
         if (window.populateSupplierDropdowns) {
             await window.populateSupplierDropdowns();
         }
+        if (window.populateProductSupplierDropdowns) {
+            await window.populateProductSupplierDropdowns();
+        }
     }
 };
         
@@ -1456,17 +1459,27 @@ window.loadProductModule = async function() {
             window.populateProductSupplierDropdowns = async function() {
                 const productSupplierDropdown = document.getElementById('product-supplier');
                 if (productSupplierDropdown) {
-                    const currentValue = productSupplierDropdown.value;
-                    productSupplierDropdown.innerHTML = '<option value="" selected disabled>Chọn nhà cung cấp</option>';
-                    
-                    ProductModule.data.currentSuppliers.forEach(supplier => {
-                        const option = document.createElement('option');
-                        option.value = supplier.id;
-                        option.textContent = supplier.name;
-                        productSupplierDropdown.appendChild(option);
-                    });
-                    
-                    productSupplierDropdown.value = currentValue;
+                    try {
+                        // Load fresh supplier data from database
+                        const db = await ProductModule.utils.waitForDB();
+                        if (db) {
+                            const suppliers = await db.getAll('suppliers');
+                            const currentValue = productSupplierDropdown.value;
+                            productSupplierDropdown.innerHTML = '<option value="" selected disabled>Chọn nhà cung cấp</option>';
+                            
+                            suppliers.forEach(supplier => {
+                                const option = document.createElement('option');
+                                option.value = supplier.id;
+                                option.textContent = supplier.name;
+                                productSupplierDropdown.appendChild(option);
+                            });
+                            
+                            productSupplierDropdown.value = currentValue;
+                            console.log('✅ Product supplier dropdown updated with fresh data');
+                        }
+                    } catch (error) {
+                        console.error('❌ Error updating product supplier dropdown:', error);
+                    }
                 }
             };
             

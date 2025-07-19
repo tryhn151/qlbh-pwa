@@ -872,28 +872,39 @@ const OrderModule = {
         },
 
         // Populate customer dropdown
-        populateCustomerDropdown() {
+        async populateCustomerDropdown() {
             const customerSelect = document.getElementById('order-customer');
             if (!customerSelect) return;
 
-            const currentValue = customerSelect.value;
-            
-            // Clear options except first
-            while (customerSelect.options.length > 1) {
-                customerSelect.remove(1);
-            }
-            
-            // Add customers
-            OrderModule.data.currentCustomers.forEach(customer => {
-                const option = document.createElement('option');
-                option.value = customer.id;
-                option.textContent = customer.name;
-                customerSelect.appendChild(option);
-            });
-            
-            // Restore selected value
-            if (currentValue) {
-                customerSelect.value = currentValue;
+            try {
+                // Load fresh customer data from database
+                const db = await OrderModule.utils.waitForDB();
+                if (db) {
+                    const customers = await db.getAll('customers');
+                    const currentValue = customerSelect.value;
+                    
+                    // Clear options except first
+                    while (customerSelect.options.length > 1) {
+                        customerSelect.remove(1);
+                    }
+                    
+                    // Add customers
+                    customers.forEach(customer => {
+                        const option = document.createElement('option');
+                        option.value = customer.id;
+                        option.textContent = customer.name;
+                        customerSelect.appendChild(option);
+                    });
+                    
+                    // Restore selected value
+                    if (currentValue) {
+                        customerSelect.value = currentValue;
+                    }
+                    
+                    console.log('✅ Order customer dropdown updated with fresh data');
+                }
+            } catch (error) {
+                console.error('❌ Error updating order customer dropdown:', error);
             }
         }
     },
@@ -1683,6 +1694,10 @@ const OrderModule = {
             await OrderModule.database.loadAll();
             await OrderModule.database.loadRelatedData();
             OrderModule.filter.apply();
+            
+            // Update dropdowns with fresh data
+            await OrderModule.businessLogic.populateCustomerDropdown();
+            await OrderModule.businessLogic.populateSupplierDropdowns();
         },
 
         // Show order detail (preserved from original)
