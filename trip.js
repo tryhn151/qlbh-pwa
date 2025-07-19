@@ -618,15 +618,17 @@ const TripModule = {
             }
 
             tableBody.innerHTML = '';
-            thisModule.data.filteredTrips.forEach(trip => {
+            TripModule.data.filteredTrips.forEach(trip => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td class="text-center fw-bold">${trip.id}</td>
                     <td class="text-start">
-                        <div class="fw-bold text-primary">${thisModule.utils.safeValue(trip.name)}</div>
+                        <div class="fw-bold text-primary">${TripModule.utils.safeValue(trip.name)}</div>
                     </td>
-                    <td class="text-center">${thisModule.utils.formatDate(trip.date)}</td>
-                    <td class="text-center">${thisModule.ui.getTripStatusBadge(trip.status)}</td>
+                    <td class="text-center">${TripModule.utils.formatDate(trip.date)}</td>
+                    <td class="text-center">
+                        <span class="badge ${TripModule.utils.getTripStatusBadgeClass(trip.status)}">${trip.status}</span>
+                    </td>
                     <td class="text-center">
                         <div class="btn-group" role="group">
                             <button class="btn btn-sm btn-outline-primary" onclick="TripModule.actions.edit(${trip.id})" data-bs-toggle="modal" data-bs-target="#tripModal"><i class="bi bi-pencil"></i></button>
