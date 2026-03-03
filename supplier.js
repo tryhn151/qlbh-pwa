@@ -71,55 +71,43 @@ const SupplierModule = {
             });
         },
 
+
+
         // Clean up modals
         cleanupAllModals() {
             try {
-                // Kiểm tra document.body tồn tại
-                if (!document.body) {
-                    console.log('⚠️ Document body not available for modal cleanup');
-                    return;
-                }
-
-                // Remove modal backdrops
+                // Remove all existing backdrop elements
                 const backdrops = document.querySelectorAll('.modal-backdrop');
-                backdrops.forEach(backdrop => {
-                    try {
-                        if (backdrop && backdrop.parentNode) {
-                            backdrop.remove();
-                        }
-                    } catch (error) {
-                        console.log('⚠️ Error removing backdrop:', error);
-                    }
-                });
+                backdrops.forEach(backdrop => backdrop.remove());
                 
-                // Remove modal-open class and padding
-                try {
-                    document.body.classList.remove('modal-open');
-                    if (document.body.style) {
-                        document.body.style.removeProperty('padding-right');
-                    }
-                } catch (error) {
-                    console.log('⚠️ Error cleaning body styles:', error);
-                }
+                // Reset body state
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('padding-right');
+                document.body.style.removeProperty('overflow');
                 
-                // Dispose modal instances
+                // Dispose all modal instances safely
                 const modalElements = document.querySelectorAll('.modal');
                 modalElements.forEach(modalEl => {
-                    try {
-                        if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                            const instance = bootstrap.Modal.getInstance(modalEl);
-                            if (instance) {
-                                instance.dispose();
-                            }
+                    const instance = bootstrap.Modal.getInstance(modalEl);
+                    if (instance) {
+                        try {
+                            instance.dispose();
+                        } catch (e) {
+                            console.log('⚠️ Modal instance disposal warning:', e);
                         }
-                    } catch (error) {
-                        console.log('⚠️ Error disposing modal instance:', error);
                     }
+                    
+                    // Ensure modal is hidden
+                    modalEl.style.display = 'none';
+                    modalEl.classList.remove('show');
+                    modalEl.setAttribute('aria-hidden', 'true');
+                    modalEl.removeAttribute('aria-modal');
+                    modalEl.removeAttribute('role');
                 });
                 
-                console.log('🧹 Cleaned up all modals');
+                console.log('🧹 Cleaned up all supplier modals');
             } catch (error) {
-                console.log('⚠️ Error during modal cleanup:', error);
+                console.log('⚠️ Error during supplier modal cleanup:', error);
             }
         }
     },
@@ -362,8 +350,7 @@ const SupplierModule = {
                     </td>
                     <td class="text-center">
                         <div class="btn-group" role="group">
-                            <button class="btn btn-sm btn-outline-primary" onclick="SupplierModule.actions.edit(${supplier.id})" 
-                                    data-bs-toggle="modal" data-bs-target="#supplierModal">
+                            <button class="btn btn-sm btn-outline-primary" onclick="SupplierModule.actions.edit(${supplier.id})">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <button class="btn btn-sm btn-outline-danger" onclick="SupplierModule.actions.confirmDelete(${supplier.id})">
@@ -420,8 +407,7 @@ const SupplierModule = {
                             </div>
                         </div>
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <button class="btn btn-outline-primary btn-sm" onclick="SupplierModule.actions.edit(${supplier.id})" 
-                                    data-bs-toggle="modal" data-bs-target="#supplierModal">
+                            <button class="btn btn-outline-primary btn-sm" onclick="SupplierModule.actions.edit(${supplier.id})">
                                 <i class="bi bi-pencil me-1"></i>Sửa
                             </button>
                             <button class="btn btn-outline-danger btn-sm" onclick="SupplierModule.actions.confirmDelete(${supplier.id})">
@@ -738,6 +724,12 @@ const SupplierModule = {
                     // Reload and refresh
                     await SupplierModule.database.loadAll();
                     await SupplierModule.refresh();
+                    
+                    // Update product supplier dropdowns immediately
+                    if (window.populateProductSupplierDropdowns) {
+                        await window.populateProductSupplierDropdowns();
+                    }
+                    
                     SupplierModule.ui.showSuccess('Thêm nhà cung cấp thành công!');
                 }
             } catch (error) {
@@ -747,13 +739,34 @@ const SupplierModule = {
 
         // Edit supplier
         async edit(supplierId) {
-            const supplier = await SupplierModule.database.get(supplierId);
-            if (!supplier) {
-                SupplierModule.ui.showErrors(['Không tìm thấy thông tin nhà cung cấp!']);
-                return;
+            try {
+                const supplier = await SupplierModule.database.get(supplierId);
+                if (!supplier) {
+                    SupplierModule.ui.showErrors(['Không tìm thấy thông tin nhà cung cấp!']);
+                    return;
+                }
+                
+                // Setup form for edit
+                SupplierModule.form.setupEdit(supplier);
+                
+                // Show modal directly without cleanup (let Bootstrap handle it)
+                const modal = document.getElementById('supplierModal');
+                if (modal) {
+                    try {
+                        const bsModal = new bootstrap.Modal(modal);
+                        bsModal.show();
+                    } catch (error) {
+                        console.error('❌ Error showing supplier modal:', error);
+                        SupplierModule.ui.showErrors(['Có lỗi khi mở form chỉnh sửa. Vui lòng thử lại.']);
+                    }
+                } else {
+                    console.error('❌ Supplier modal element not found');
+                    SupplierModule.ui.showErrors(['Không tìm thấy form chỉnh sửa. Vui lòng tải lại trang.']);
+                }
+            } catch (error) {
+                console.error('❌ Error in edit supplier:', error);
+                SupplierModule.ui.showErrors(['Có lỗi khi chỉnh sửa nhà cung cấp. Vui lòng thử lại.']);
             }
-
-            SupplierModule.form.setupEdit(supplier);
         },
 
         // Update supplier
@@ -790,6 +803,12 @@ const SupplierModule = {
                     // Reload and refresh
                     await SupplierModule.database.loadAll();
                     await SupplierModule.refresh();
+                    
+                    // Update product supplier dropdowns immediately
+                    if (window.populateProductSupplierDropdowns) {
+                        await window.populateProductSupplierDropdowns();
+                    }
+                    
                     SupplierModule.ui.showSuccess('Cập nhật nhà cung cấp thành công!');
                 }
             } catch (error) {
@@ -799,23 +818,39 @@ const SupplierModule = {
 
         // Confirm delete
         confirmDelete(supplierId) {
-            const supplier = SupplierModule.data.currentSuppliers.find(s => s.id === supplierId);
-            if (!supplier) return;
+            try {
+                const supplier = SupplierModule.data.currentSuppliers.find(s => s.id === supplierId);
+                if (!supplier) return;
 
-            SupplierModule.data.supplierToDelete = supplier;
+                SupplierModule.data.supplierToDelete = supplier;
 
-            // Update delete modal content
-            const nameElement = document.getElementById('delete-supplier-name');
-            const detailsElement = document.getElementById('delete-supplier-details');
+                // Update delete modal content
+                const nameElement = document.getElementById('delete-supplier-name');
+                const detailsElement = document.getElementById('delete-supplier-details');
 
-            if (nameElement) nameElement.textContent = supplier.name;
-            if (detailsElement) {
-                detailsElement.textContent = `${supplier.region || 'Chưa có khu vực'} • ${supplier.contact || 'Chưa có liên hệ'}`;
+                if (nameElement) nameElement.textContent = supplier.name;
+                if (detailsElement) {
+                    detailsElement.textContent = `${supplier.region || 'Chưa có khu vực'} • ${supplier.contact || 'Chưa có liên hệ'}`;
+                }
+
+                // Show delete modal safely
+                const modal = document.getElementById('deleteSupplierModal');
+                if (modal) {
+                    try {
+                        const bsModal = new bootstrap.Modal(modal);
+                        bsModal.show();
+                    } catch (error) {
+                        console.error('❌ Error showing delete supplier modal:', error);
+                        SupplierModule.ui.showErrors(['Có lỗi khi mở dialog xác nhận xóa. Vui lòng thử lại.']);
+                    }
+                } else {
+                    console.error('❌ Delete supplier modal element not found');
+                    SupplierModule.ui.showErrors(['Không tìm thấy dialog xác nhận xóa. Vui lòng tải lại trang.']);
+                }
+            } catch (error) {
+                console.error('❌ Error in confirm delete supplier:', error);
+                SupplierModule.ui.showErrors(['Có lỗi khi xác nhận xóa nhà cung cấp. Vui lòng thử lại.']);
             }
-
-            // Show delete modal
-            const deleteModal = new bootstrap.Modal(document.getElementById('deleteSupplierModal'));
-            deleteModal.show();
         },
 
         // Delete supplier
@@ -886,6 +921,11 @@ const SupplierModule = {
             if (window.populateSupplierDropdowns) {
                 await window.populateSupplierDropdowns();
             }
+            
+            // Update product supplier dropdowns
+            if (window.populateProductSupplierDropdowns) {
+                await window.populateProductSupplierDropdowns();
+            }
         }
     },
 
@@ -926,8 +966,28 @@ const SupplierModule = {
             // Add supplier button
             const addBtn = document.getElementById('add-supplier-btn');
             if (addBtn) {
-                // The modal is now opened via data-bs-toggle attributes, not custom JS
-                // We will use the 'show.bs.modal' event to prepare the form
+                addBtn.addEventListener('click', (event) => {
+                    // Prevent any default behavior
+                    event.preventDefault();
+                    
+                    // Reset form first
+                    SupplierModule.form.resetToAdd();
+                    
+                    // Show modal directly without cleanup (let Bootstrap handle it)
+                    const modal = document.getElementById('supplierModal');
+                    if (modal) {
+                        try {
+                            const bsModal = new bootstrap.Modal(modal);
+                            bsModal.show();
+                        } catch (error) {
+                            console.error('❌ Error showing add supplier modal:', error);
+                            SupplierModule.ui.showErrors(['Có lỗi khi mở form thêm nhà cung cấp. Vui lòng thử lại.']);
+                        }
+                    } else {
+                        console.error('❌ Supplier modal element not found');
+                        SupplierModule.ui.showErrors(['Không tìm thấy form thêm nhà cung cấp. Vui lòng tải lại trang.']);
+                    }
+                });
             }
 
             // Refresh button
@@ -980,49 +1040,54 @@ const SupplierModule = {
             const supplierModal = document.getElementById('supplierModal');
             if (supplierModal) {
                 supplierModal.addEventListener('show.bs.modal', (event) => {
-                    try {
-                        const button = event.relatedTarget; // Button that triggered the modal
-                        const action = button.getAttribute('data-bs-action');
-
-                        if (action === 'add') {
-                            SupplierModule.form.resetToAdd();
+                    console.log('🎯 Supplier modal opening...');
+                    
+                    // Setup real-time validation
+                    SupplierModule.form.setupRealTimeValidation();
+                    
+                    // Ensure modal is properly initialized
+                    setTimeout(() => {
+                        const firstField = document.getElementById('supplier-name');
+                        if (firstField) {
+                            firstField.focus();
                         }
-
-                        SupplierModule.form.setupRealTimeValidation();
-                        
-                        setTimeout(() => {
-                            const firstField = document.getElementById('supplier-name');
-                            if (firstField) firstField.focus();
-                        }, 300);
-                    } catch (error) {
-                        console.error('❌ Error in modal show event:', error);
-                    }
+                    }, 300);
                 });
                 
-                supplierModal.addEventListener('hidden.bs.modal', () => {
-                    try {
-                        SupplierModule.form.resetToAdd();
-                        SupplierModule.form.clearValidationErrors();
-                        setTimeout(() => {
-                            SupplierModule.utils.cleanupAllModals();
-                        }, 100);
-                    } catch (error) {
-                        console.error('❌ Error in modal hidden event:', error);
-                    }
+                supplierModal.addEventListener('shown.bs.modal', (event) => {
+                    console.log('✅ Supplier modal opened successfully');
                 });
-            }
+                
+                supplierModal.addEventListener('hide.bs.modal', (event) => {
+                    console.log('🔄 Supplier modal closing...');
+                });
+                
+                supplierModal.addEventListener('hidden.bs.modal', (event) => {
+                    console.log('✅ Supplier modal closed');
+                    
+                    // Reset form and clear validation
+                    SupplierModule.form.resetToAdd();
+                    SupplierModule.form.clearValidationErrors();
+                    
+                    // Cleanup with delay to ensure modal is fully hidden
+                    setTimeout(() => {
+                        SupplierModule.utils.cleanupAllModals();
+                    }, 150);
+                });
+            }   
 
             const deleteModal = document.getElementById('deleteSupplierModal');
             if (deleteModal) {
-                deleteModal.addEventListener('hidden.bs.modal', () => {
-                    try {
-                        SupplierModule.data.supplierToDelete = null;
-                        setTimeout(() => {
-                            SupplierModule.utils.cleanupAllModals();
-                        }, 100);
-                    } catch (error) {
-                        console.error('❌ Error in delete modal hidden event:', error);
-                    }
+                deleteModal.addEventListener('hidden.bs.modal', (event) => {
+                    console.log('✅ Delete supplier modal closed');
+                    
+                    // Clear delete data
+                    SupplierModule.data.supplierToDelete = null;
+                    
+                    // Cleanup with delay
+                    setTimeout(() => {
+                        SupplierModule.utils.cleanupAllModals();
+                    }, 150);
                 });
             }
 
@@ -1036,6 +1101,31 @@ const SupplierModule = {
     // Track initialization state
     isInitialized: false,
 
+            // Verify modal elements exist
+        verifyModalElements() {
+            const supplierModal = document.getElementById('supplierModal');
+            const deleteModal = document.getElementById('deleteSupplierModal');
+            
+            if (!supplierModal) {
+                console.error('❌ Supplier modal element not found in DOM');
+                return false;
+            }
+            
+            if (!deleteModal) {
+                console.error('❌ Delete supplier modal element not found in DOM');
+                return false;
+            }
+            
+            // Check if Bootstrap is available
+            if (typeof bootstrap === 'undefined') {
+                console.error('❌ Bootstrap not available');
+                return false;
+            }
+            
+            console.log('✅ Supplier modal elements verified');
+            return true;
+        },
+
     // Initialize module
     async init() {
         try {
@@ -1046,6 +1136,31 @@ const SupplierModule = {
             }
 
             console.log('🎯 Initializing Supplier Management Module...');
+            
+            // Wait for Bootstrap to be available
+            if (typeof bootstrap === 'undefined') {
+                console.log('⏳ Waiting for Bootstrap to load...');
+                await new Promise(resolve => {
+                    const checkBootstrap = () => {
+                        if (typeof bootstrap !== 'undefined') {
+                            resolve();
+                        } else {
+                            setTimeout(checkBootstrap, 100);
+                        }
+                    };
+                    checkBootstrap();
+                });
+            }
+            
+
+            
+            // Verify modal elements exist
+            if (!this.verifyModalElements()) {
+                console.error('❌ Modal elements not ready, delaying initialization...');
+                // Retry after a short delay
+                setTimeout(() => this.init(), 500);
+                return false;
+            }
             
             // Cleanup any existing modals
             this.utils.cleanupAllModals();
@@ -1122,6 +1237,21 @@ window.loadSupplierModule = async function() {
             return true;
         }
 
+        // Ensure Bootstrap is loaded
+        if (typeof bootstrap === 'undefined') {
+            console.log('⏳ Waiting for Bootstrap to be available...');
+            await new Promise(resolve => {
+                const checkBootstrap = () => {
+                    if (typeof bootstrap !== 'undefined') {
+                        resolve();
+                    } else {
+                        setTimeout(checkBootstrap, 100);
+                    }
+                };
+                checkBootstrap();
+            });
+        }
+
         const success = await SupplierModule.init();
         
         if (success) {
@@ -1162,8 +1292,11 @@ window.loadSupplierModule = async function() {
 
 // Auto-initialize if DOM is ready
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', window.loadSupplierModule);
+    document.addEventListener('DOMContentLoaded', () => {
+        // Wait a bit more for Bootstrap to be fully loaded
+        setTimeout(window.loadSupplierModule, 500);
+    });
 } else {
-    // DOM already loaded
-    setTimeout(window.loadSupplierModule, 100);
+    // DOM already loaded, wait for Bootstrap
+    setTimeout(window.loadSupplierModule, 500);
 }
