@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "idb": "^8.0.2"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.8.0"
   }
 }

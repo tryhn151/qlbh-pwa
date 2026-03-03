@@ -45,41 +45,10 @@ const CustomerModule = {
             return value;
         },
 
-        // Wait for database
+        // Wait for database (Firestore - always ready after auth)
         async waitForDB() {
-    return new Promise((resolve) => {
-        if (window.db) {
-            try {
-                const tx = window.db.transaction('customers', 'readonly');
-                        tx.abort();
-                resolve(window.db);
-                return;
-            } catch (error) {
-                        // Continue waiting
-                    }
-                }
-                
-        let attempts = 0;
-                const maxAttempts = 150;
-        
-        const checkInterval = setInterval(() => {
-            attempts++;
-            
-            if (window.db) {
-                try {
-                    const tx = window.db.transaction('customers', 'readonly');
-                            tx.abort();
-                    
-                    clearInterval(checkInterval);
-                    resolve(window.db);
-                } catch (error) {
-                            // Continue waiting
-                }
-            } else if (attempts >= maxAttempts) {
-                clearInterval(checkInterval);
-                        resolve(null);
-            }
-                }, 100);
+            return window.DB ? true : null;
+        }, 100);
         
         setTimeout(() => {
             clearInterval(checkInterval);
@@ -211,22 +180,14 @@ const CustomerModule = {
         }
     },
 
-    // ===== DATABASE OPERATIONS =====
+    // ===== DATABASE OPERATIONS (Firestore via window.DB) =====
     database: {
-        // Add customer (keeping original logic)
+        // Add customer
         async add(customerData) {
             try {
-                const db = await CustomerModule.utils.waitForDB();
-                if (!db) {
-                    throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-                }
+                if (!window.DB) throw new Error('Database chưa sẵn sàng');
+                if (!customerData.name || !customerData.name.trim()) throw new Error('Tên khách hàng là bắt buộc');
 
-                // Backend validation
-                if (!customerData.name || !customerData.name.trim()) {
-                    throw new Error('Tên khách hàng là bắt buộc');
-                }
-
-                // Normalize data
                 const normalizedData = {
                     name: customerData.name.trim(),
                     contact: customerData.contact ? customerData.contact.trim() : '',
@@ -234,12 +195,7 @@ const CustomerModule = {
                     updated_at: new Date().toISOString()
                 };
 
-                const tx = db.transaction('customers', 'readwrite');
-                const store = tx.objectStore('customers');
-                
-                const id = await store.add(normalizedData);
-                await tx.done;
-                
+                const id = await window.DB.collection('customers').add(normalizedData);
                 console.log('✅ Added customer with ID:', id);
                 return id;
             } catch (error) {
@@ -248,43 +204,14 @@ const CustomerModule = {
             }
         },
 
-        // Update customer (keeping original logic)
         async update(customerId, customerData) {
             try {
-                const db = await CustomerModule.utils.waitForDB();
-                if (!db) {
-                    throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-                }
-
-                // Backend validation
-                if (!customerData.name || !customerData.name.trim()) {
-                    throw new Error('Tên khách hàng là bắt buộc');
-                }
-
-                const tx = db.transaction('customers', 'readwrite');
-                const store = tx.objectStore('customers');
-                
-                // Get existing customer
-                const existingCustomer = await store.get(customerId);
-                if (!existingCustomer) {
-                    throw new Error('Không tìm thấy khách hàng');
-                }
-                
-                // Normalize and update data
-                const normalizedData = {
-                    name: customerData.name.trim(),
-                    contact: customerData.contact ? customerData.contact.trim() : '',
-                    updated_at: new Date().toISOString()
-                };
-
-                const updatedCustomer = { 
-                    ...existingCustomer, 
-                    ...normalizedData 
-                };
-                
-                await store.put(updatedCustomer);
-                await tx.done;
-                
+                if (!window.DB) throw new Error('Database chưa sẵn sàng');
+                if (!customerData.name || !customerData.name.trim()) throw new Error('Tên khách hàng là bắt buộc');
+                const existing = await window.DB.collection('customers').get(customerId);
+                if (!existing) throw new Error('Không tìm thấy khách hàng');
+                const updated = { ...existing, name: customerData.name.trim(), contact: customerData.contact ? customerData.contact.trim() : '', updated_at: new Date().toISOString() };
+                await window.DB.collection('customers').put(updated);
                 console.log('✅ Updated customer with ID:', customerId);
                 return true;
             } catch (error) {
@@ -293,20 +220,10 @@ const CustomerModule = {
             }
         },
 
-        // Delete customer (keeping original logic)
         async delete(customerId) {
             try {
-                const db = await CustomerModule.utils.waitForDB();
-        if (!db) {
-            throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-        }
-        
-                const tx = db.transaction('customers', 'readwrite');
-                const store = tx.objectStore('customers');
-                
-                await store.delete(customerId);
-                await tx.done;
-                
+                if (!window.DB) throw new Error('Database chưa sẵn sàng');
+                await window.DB.collection('customers').delete(customerId);
                 console.log('✅ Deleted customer with ID:', customerId);
                 return true;
             } catch (error) {
@@ -315,30 +232,20 @@ const CustomerModule = {
             }
         },
 
-        // Get single customer
         async get(customerId) {
             try {
-                const db = await CustomerModule.utils.waitForDB();
-                if (!db) return null;
-
-        const tx = db.transaction('customers', 'readonly');
-        const store = tx.objectStore('customers');
-                return await store.get(customerId);
+                if (!window.DB) return null;
+                return await window.DB.collection('customers').get(customerId);
             } catch (error) {
                 console.error('❌ Error getting customer:', error);
                 return null;
             }
         },
 
-        // Load all customers
         async loadAll() {
             try {
-                const db = await CustomerModule.utils.waitForDB();
-                if (!db) return;
-
-                const tx = db.transaction('customers', 'readonly');
-                const store = tx.objectStore('customers');
-                CustomerModule.data.currentCustomers = await store.getAll();
+                if (!window.DB) return;
+                CustomerModule.data.currentCustomers = await window.DB.collection('customers').getAll();
                 CustomerModule.data.filteredCustomers = [...CustomerModule.data.currentCustomers];
                 
                 console.log(`📊 Loaded ${CustomerModule.data.currentCustomers.length} customers`);

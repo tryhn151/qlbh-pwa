@@ -59,41 +59,10 @@ const SupplierModule = {
             return value;
         },
 
-        // Wait for database
+        // Wait for database (Firestore - always ready after auth)
         async waitForDB() {
-            return new Promise((resolve) => {
-                if (window.db) {
-                    try {
-                        const tx = window.db.transaction('suppliers', 'readonly');
-                        tx.abort();
-                        resolve(window.db);
-                        return;
-                    } catch (error) {
-                        // Continue waiting
-                    }
-                }
-                
-                let attempts = 0;
-                const maxAttempts = 150;
-                
-                const checkInterval = setInterval(() => {
-                    attempts++;
-                    
-                    if (window.db) {
-                        try {
-                            const tx = window.db.transaction('suppliers', 'readonly');
-                            tx.abort();
-                            
-                            clearInterval(checkInterval);
-                            resolve(window.db);
-                        } catch (error) {
-                            // Continue waiting
-                        }
-                    } else if (attempts >= maxAttempts) {
-                        clearInterval(checkInterval);
-                        resolve(null);
-                    }
-                }, 100);
+            return window.DB ? true : null;
+        }, 100);
                 
                 setTimeout(() => {
                     clearInterval(checkInterval);
@@ -237,22 +206,12 @@ const SupplierModule = {
         }
     },
 
-    // ===== DATABASE OPERATIONS =====
+    // ===== DATABASE OPERATIONS (Firestore via window.DB) =====
     database: {
-        // Add supplier
         async add(supplierData) {
             try {
-                const db = await SupplierModule.utils.waitForDB();
-                if (!db) {
-                    throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-                }
-
-                // Backend validation
-                if (!supplierData.name || !supplierData.name.trim()) {
-                    throw new Error('Tên nhà cung cấp là bắt buộc');
-                }
-
-                // Normalize data
+                if (!window.DB) throw new Error('Database chưa sẵn sàng');
+                if (!supplierData.name || !supplierData.name.trim()) throw new Error('Tên nhà cung cấp là bắt buộc');
                 const normalizedData = {
                     name: supplierData.name.trim(),
                     region: supplierData.region ? supplierData.region.trim() : '',
@@ -261,12 +220,7 @@ const SupplierModule = {
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                 };
-
-                const tx = db.transaction('suppliers', 'readwrite');
-                const store = tx.objectStore('suppliers');
-                
-                const id = await store.add(normalizedData);
-                await tx.done;
+                const id = await window.DB.collection('suppliers').add(normalizedData);
                 
                 console.log('✅ Added supplier with ID:', id);
                 return id;
@@ -276,45 +230,14 @@ const SupplierModule = {
             }
         },
 
-        // Update supplier
         async update(supplierId, supplierData) {
             try {
-                const db = await SupplierModule.utils.waitForDB();
-                if (!db) {
-                    throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-                }
-
-                // Backend validation
-                if (!supplierData.name || !supplierData.name.trim()) {
-                    throw new Error('Tên nhà cung cấp là bắt buộc');
-                }
-
-                const tx = db.transaction('suppliers', 'readwrite');
-                const store = tx.objectStore('suppliers');
-                
-                // Get existing supplier
-                const existingSupplier = await store.get(supplierId);
-                if (!existingSupplier) {
-                    throw new Error('Không tìm thấy nhà cung cấp');
-                }
-                
-                // Normalize and update data
-                const normalizedData = {
-                    name: supplierData.name.trim(),
-                    region: supplierData.region ? supplierData.region.trim() : '',
-                    address: supplierData.address ? supplierData.address.trim() : '',
-                    contact: supplierData.contact ? supplierData.contact.trim() : '',
-                    updated_at: new Date().toISOString()
-                };
-
-                const updatedSupplier = { 
-                    ...existingSupplier, 
-                    ...normalizedData 
-                };
-                
-                await store.put(updatedSupplier);
-                await tx.done;
-                
+                if (!window.DB) throw new Error('Database chưa sẵn sàng');
+                if (!supplierData.name || !supplierData.name.trim()) throw new Error('Tên nhà cung cấp là bắt buộc');
+                const existing = await window.DB.collection('suppliers').get(supplierId);
+                if (!existing) throw new Error('Không tìm thấy nhà cung cấp');
+                const updated = { ...existing, name: supplierData.name.trim(), region: supplierData.region ? supplierData.region.trim() : '', address: supplierData.address ? supplierData.address.trim() : '', contact: supplierData.contact ? supplierData.contact.trim() : '', updated_at: new Date().toISOString() };
+                await window.DB.collection('suppliers').put(updated);
                 console.log('✅ Updated supplier with ID:', supplierId);
                 return true;
             } catch (error) {
@@ -323,20 +246,10 @@ const SupplierModule = {
             }
         },
 
-        // Delete supplier
         async delete(supplierId) {
             try {
-                const db = await SupplierModule.utils.waitForDB();
-                if (!db) {
-                    throw new Error('Không thể kết nối đến cơ sở dữ liệu');
-                }
-
-                const tx = db.transaction('suppliers', 'readwrite');
-                const store = tx.objectStore('suppliers');
-                
-                await store.delete(supplierId);
-                await tx.done;
-                
+                if (!window.DB) throw new Error('Database chưa sẵn sàng');
+                await window.DB.collection('suppliers').delete(supplierId);
                 console.log('✅ Deleted supplier with ID:', supplierId);
                 return true;
             } catch (error) {
@@ -345,30 +258,20 @@ const SupplierModule = {
             }
         },
 
-        // Get single supplier
         async get(supplierId) {
             try {
-                const db = await SupplierModule.utils.waitForDB();
-                if (!db) return null;
-
-                const tx = db.transaction('suppliers', 'readonly');
-                const store = tx.objectStore('suppliers');
-                return await store.get(supplierId);
+                if (!window.DB) return null;
+                return await window.DB.collection('suppliers').get(supplierId);
             } catch (error) {
                 console.error('❌ Error getting supplier:', error);
                 return null;
             }
         },
 
-        // Load all suppliers
         async loadAll() {
             try {
-                const db = await SupplierModule.utils.waitForDB();
-                if (!db) return;
-
-                const tx = db.transaction('suppliers', 'readonly');
-                const store = tx.objectStore('suppliers');
-                SupplierModule.data.currentSuppliers = await store.getAll();
+                if (!window.DB) return;
+                SupplierModule.data.currentSuppliers = await window.DB.collection('suppliers').getAll();
                 SupplierModule.data.filteredSuppliers = [...SupplierModule.data.currentSuppliers];
                 
                 console.log(`📊 Loaded ${SupplierModule.data.currentSuppliers.length} suppliers`);

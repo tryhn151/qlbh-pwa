@@ -1,16 +1,58 @@
-# Các file hệ thống
+# ===== HỆ THỐNG & OS =====
 .DS_Store
 Thumbs.db
+desktop.ini
+*.lnk
 
-# Các thư mục và file của IDE/Editor
+# ===== IDE / EDITOR =====
 .idea/
 .vscode/
 *.sublime-project
 *.sublime-workspace
+*.swp
+*.swo
+*~
 
-# Các file log
+# ===== AI AGENT & TOOLS =====
+.agent/
+.serena/
+.gemini/
+.cursor/
+GEMINI.md
+ARCHITECTURE.md
+CODEBASE.md
+
+# ===== NODE.JS =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.pnp
+.pnp.js
+
+# ===== FIREBASE =====
+# Cache của Firebase CLI (không cần thiết cho người khác)
+.firebase/
+# Nhưng GIỮ LẠI firebase.json và .firebaserc (cần cho deploy)
+
+# ===== LOG & TẠM THỜI =====
 *.log
-
-# Các file tạm thời
 *.tmp
 *.bak
+*.orig
+
+# ===== FILE NHẠY CẢM =====
+# Nếu có file chứa secret key thì add vào đây
+# .env
+# .env.local
+# secrets.json
+
+# ===== KHÔNG CẦN THIẾT =====
+# File debug/test cũ (đã được comment trong index.html)
+test_bug_fixes.js
+debug_dropdown.js
+quick_fixes.js
+test_new_trip_workflow.js
+table_standardization.js
+business.txt

@@ -1,16 +1,13 @@
-// Đảm bảo tất cả code chạy sau khi DOM đã load
-document.addEventListener('DOMContentLoaded', () => {
-    // Khởi tạo ứng dụng
-    initApp();
-});
+﻿// initApp() is called by firebase-config.js after Google sign-in succeeds.
+// DO NOT call here - auth gate handles timing.
 
 // Khởi tạo ứng dụng
 async function initApp() {
     // Đăng ký Service Worker
     registerServiceWorker();
 
-    // Khởi tạo IndexedDB
-    await initDB();
+    // NOTE: Database is Firestore (via window.DB), no local init needed
+    console.log('✅ App starting with user:', window.currentUser?.email);
 
     // Hiển thị dữ liệu ban đầu
     await loadInitialData();
@@ -63,7 +60,7 @@ async function loadInitialData() {
         } else {
             console.warn('Module chuyến hàng chưa sẵn sàng - sẽ được khởi tạo sau');
             // Hiển thị danh sách chuyến hàng (fallback cũ)
-        await displayTrips();
+            await displayTrips();
         }
 
         // Hiển thị danh sách thanh toán
@@ -83,7 +80,7 @@ async function loadInitialData() {
         if (typeof setupReportEventListeners === 'function') {
             setupReportEventListeners();
         }
-        
+
         // Đảm bảo tất cả dropdown được populate sau khi load xong
         setTimeout(async () => {
             console.log('Đang populate tất cả dropdowns sau khi load xong...');
@@ -126,204 +123,13 @@ function registerServiceWorker() {
     }
 }
 
-// Khởi tạo IndexedDB sử dụng thư viện idb
-window.db = null; // Khai báo biến toàn cục để các file khác có thể truy cập
+// NOTE: window.db is now the Firestore shim defined in firebase-config.js
+// initDB() is kept as a no-op stub to avoid errors in any lingering references.
 async function initDB() {
-    try {
-        console.log('Đang khởi tạo IndexedDB...');
-
-        // Kiểm tra xem idb có sẵn không với retry logic tốt hơn
-        let retryCount = 0;
-        const maxRetries = 30; // 3 giây
-        
-        while (typeof idb === 'undefined' && retryCount < maxRetries) {
-            console.log(`Chờ thư viện idb... lần thử ${retryCount + 1}`);
-            await new Promise(resolve => setTimeout(resolve, 100));
-            retryCount++;
-        }
-
-        if (typeof idb === 'undefined') {
-            console.error('Thư viện idb không được tải sau 3 giây. Kiểm tra kết nối internet.');
-            throw new Error('Thư viện idb không được tải. Vui lòng tải lại trang.');
-        }
-
-        console.log('Thư viện idb đã được tải, tiếp tục khởi tạo database...');
-        window.db = await idb.openDB('salesAppDB', 4, { // Tăng version lên 4
-            upgrade(db, oldVersion, newVersion, transaction) {
-                console.log(`Đang nâng cấp database từ phiên bản ${oldVersion} lên ${newVersion}...`);
-
-                // Nâng cấp từ phiên bản cũ hoặc tạo mới
-                if (oldVersion < 1) {
-                    // 1. Tạo object store customers
-                    if (!db.objectStoreNames.contains('customers')) {
-                        console.log('Tạo object store customers');
-                        const customersStore = db.createObjectStore('customers', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        // Các trường: name, contact
-                    }
-
-                    // 2. Tạo object store orders
-                    if (!db.objectStoreNames.contains('orders')) {
-                        console.log('Tạo object store orders');
-                        const ordersStore = db.createObjectStore('orders', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        ordersStore.createIndex('customerId', 'customerId');
-                    }
-
-                    // 3. Tạo object store trips
-                    if (!db.objectStoreNames.contains('trips')) {
-                        console.log('Tạo object store trips');
-                        const tripsStore = db.createObjectStore('trips', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                    }
-
-                    // 4. Tạo object store purchases
-                    if (!db.objectStoreNames.contains('purchases')) {
-                        console.log('Tạo object store purchases');
-                        const purchasesStore = db.createObjectStore('purchases', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        purchasesStore.createIndex('tripId', 'tripId');
-                    }
-
-                    // 5. Tạo object store customerPayments (DEPRECATED - sẽ được thay thế bằng payments)
-                    if (!db.objectStoreNames.contains('customerPayments')) {
-                        console.log('Tạo object store customerPayments');
-                        const customerPaymentsStore = db.createObjectStore('customerPayments', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        customerPaymentsStore.createIndex('customerId', 'customerId');
-                    }
-
-                    // 6. Tạo object store payments (mới cho workflow thanh toán theo đơn hàng)
-                    if (!db.objectStoreNames.contains('payments')) {
-                        console.log('Tạo object store payments');
-                        const paymentsStore = db.createObjectStore('payments', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        paymentsStore.createIndex('orderId', 'orderId');
-                        paymentsStore.createIndex('customerId', 'customerId');
-                    }
-
-                    // Kiểm tra object store sales
-                    if (!db.objectStoreNames.contains('sales')) {
-                        console.log('Tạo object store sales');
-                        const salesStore = db.createObjectStore('sales', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        salesStore.createIndex('date', 'date');
-                        salesStore.createIndex('productName', 'productName');
-                    }
-                }
-
-                // Nâng cấp lên phiên bản 2 - Thêm các object store mới
-                if (oldVersion < 2) {
-                    // 1. Tạo object store suppliers (nhà cung cấp)
-                    if (!db.objectStoreNames.contains('suppliers')) {
-                        console.log('Tạo object store suppliers');
-                        const suppliersStore = db.createObjectStore('suppliers', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        // Các trường: name, address, contact, region
-                    }
-
-                    // 2. Tạo object store products (sản phẩm)
-                    if (!db.objectStoreNames.contains('products')) {
-                        console.log('Tạo object store products');
-                        const productsStore = db.createObjectStore('products', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        productsStore.createIndex('supplierId', 'supplierId');
-                        // Các trường: name, code, unit, purchasePrice, supplierId
-                    }
-
-                    // 3. Tạo object store customerPrices (giá bán theo khách hàng)
-                    if (!db.objectStoreNames.contains('customerPrices')) {
-                        console.log('Tạo object store customerPrices');
-                        const customerPricesStore = db.createObjectStore('customerPrices', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        customerPricesStore.createIndex('customerId', 'customerId');
-                        customerPricesStore.createIndex('productId', 'productId');
-                        customerPricesStore.createIndex('customerProduct', ['customerId', 'productId']);
-                        // Các trường: customerId, productId, price, lastUpdated
-                    }
-
-                    // 4. Tạo object store tripExpenses (chi phí phát sinh của chuyến hàng)
-                    if (!db.objectStoreNames.contains('tripExpenses')) {
-                        console.log('Tạo object store tripExpenses');
-                        const tripExpensesStore = db.createObjectStore('tripExpenses', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        tripExpensesStore.createIndex('tripId', 'tripId');
-                        tripExpensesStore.createIndex('category', 'category');
-                        // Các trường: tripId, description, amount, date, category
-                    }
-
-                    // 5. Tạo object store orderItems (chi tiết đơn hàng)
-                    if (!db.objectStoreNames.contains('orderItems')) {
-                        console.log('Tạo object store orderItems');
-                        const orderItemsStore = db.createObjectStore('orderItems', {
-                            keyPath: 'id',
-                            autoIncrement: true
-                        });
-                        orderItemsStore.createIndex('orderId', 'orderId');
-                        orderItemsStore.createIndex('productId', 'productId');
-                        // Các trường: orderId, productId, qty, sellingPrice
-                    }
-                }
-
-                // Nâng cấp lên phiên bản 3 - Cập nhật để hỗ trợ quản lý công nợ
-                if (oldVersion < 3) {
-                    // Trong upgrade callback, sử dụng transaction được cung cấp để truy cập object store
-                    if (db.objectStoreNames.contains('orders')) {
-                        // Dùng transaction.objectStore thay vì db.objectStore
-                        const orderStore = transaction.objectStore('orders');
-                        if (!orderStore.indexNames.contains('paymentStatus')) {
-                            orderStore.createIndex('paymentStatus', 'paymentStatus');
-                        }
-                    }
-                }
-
-                // Nâng cấp lên phiên bản 4 - Thêm object store legacyDebts nếu chưa có
-                if (oldVersion < 4) {
-                    if (!db.objectStoreNames.contains('legacyDebts')) {
-                        console.log('Tạo object store legacyDebts');
-                        db.createObjectStore('legacyDebts', { keyPath: 'id', autoIncrement: true });
-                    }
-                }
-            }
-        });
-
-        // Kiểm tra xem database có thể sử dụng không
-        try {
-            const tx = window.db.transaction('customers', 'readonly');
-            tx.abort();
-            console.log('IndexedDB đã được khởi tạo thành công và có thể sử dụng');
-            return true;
-        } catch (error) {
-            console.error('Database đã được tạo nhưng không thể sử dụng:', error);
-            throw error;
-        }
-    } catch (error) {
-        console.error('Lỗi nghiêm trọng khi khởi tạo IndexedDB:', error);
-        throw error;
-    }
+    console.log('✅ Using Firestore via window.db shim (IndexedDB not used)');
+    return true;
 }
+
 
 // Thiết lập các event listener
 function setupEventListeners() {
@@ -331,13 +137,13 @@ function setupEventListeners() {
     const tabs = document.querySelectorAll('button[data-bs-toggle="tab"]');
     // Biến để kiểm soát việc load tab
     let isTabLoading = false;
-    
+
     tabs.forEach(tab => {
         tab.addEventListener('shown.bs.tab', async (e) => {
             // Tránh load song song nhiều tab
             if (isTabLoading) return;
             isTabLoading = true;
-            
+
             try {
                 const targetId = e.target.getAttribute('data-bs-target');
                 console.log('Chuyển sang tab:', targetId);
@@ -410,15 +216,15 @@ function setupEventListeners() {
                     }
                 }
             } catch (error) {
-        if (error.name === 'AbortError') {
-            // This error can happen if the user switches tabs quickly,
-            // causing the database operation of the previous tab to be aborted.
-            // It's generally safe to ignore.
-            console.log('Data loading aborted by user action (tab switch).');
-        } else {
-            console.error('Lỗi khi chuyển tab:', error);
-        }
-    } finally {
+                if (error.name === 'AbortError') {
+                    // This error can happen if the user switches tabs quickly,
+                    // causing the database operation of the previous tab to be aborted.
+                    // It's generally safe to ignore.
+                    console.log('Data loading aborted by user action (tab switch).');
+                } else {
+                    console.error('Lỗi khi chuyển tab:', error);
+                }
+            } finally {
                 isTabLoading = false;
             }
         });
@@ -577,19 +383,17 @@ function setupEventListeners() {
 // Export dữ liệu ra file JSON
 async function exportDataToJson() {
     try {
-        // Lấy tất cả dữ liệu từ các object store
+        // Lấy tất cả dữ liệu từ các collection Firestore
         const allData = {};
-        const storeNames = ['customers', 'suppliers', 'products', 'orders', 'trips', 'purchases', 'tripExpenses', 'customerPayments'];
+        const storeNames = ['customers', 'suppliers', 'products', 'orders', 'trips', 'purchases', 'tripExpenses', 'customerPayments', 'payments', 'orderItems', 'customerPrices'];
 
         for (const storeName of storeNames) {
             try {
-                const tx = window.db.transaction(storeName, 'readonly');
-                const store = tx.objectStore(storeName);
-                const data = await store.getAll();
+                const data = await window.DB.collection(storeName).getAll();
 
                 // Chuyển đổi ngày thành chuỗi để dễ đọc
                 const processedData = data.map(item => {
-                    const newItem = {...item};
+                    const newItem = { ...item };
                     // Chuyển đổi các trường ngày thành chuỗi ISO
                     for (const key in newItem) {
                         if (newItem[key] instanceof Date) {
@@ -663,32 +467,17 @@ async function importDataFromJson(e) {
                     throw new Error('Không có dữ liệu hợp lệ để nhập');
                 }
 
-                // Nhập dữ liệu cho từng object store
+                // Nhập dữ liệu cho từng collection Firestore
                 for (const storeName of storeNames) {
                     try {
-                        // Xóa dữ liệu hiện tại của object store
-                        const clearTx = window.db.transaction(storeName, 'readwrite');
-                        const clearStore = clearTx.objectStore(storeName);
-                        await clearStore.clear();
-                        await clearTx.done;
+                        // Xóa dữ liệu hiện tại
+                        await window.DB.collection(storeName).clear();
                         console.log(`Đã xóa dữ liệu cũ của ${storeName}`);
 
                         // Thêm dữ liệu mới
-                        const tx = window.db.transaction(storeName, 'readwrite');
-                        const store = tx.objectStore(storeName);
-
                         for (const item of jsonData[storeName]) {
-                            // Chuyển đổi các trường ngày từ chuỗi thành đối tượng Date
-                            for (const key in item) {
-                                if (typeof item[key] === 'string' && item[key].match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
-                                    item[key] = new Date(item[key]);
-                                }
-                            }
-
-                            await store.add(item);
+                            await window.DB.collection(storeName).add(item);
                         }
-
-                        await tx.done;
                         console.log(`Đã nhập ${jsonData[storeName].length} bản ghi vào ${storeName}`);
                     } catch (storeError) {
                         console.error(`Lỗi khi nhập dữ liệu vào ${storeName}:`, storeError);
@@ -777,41 +566,23 @@ async function populateSupplierDropdowns() {
     if (typeof window.populateSupplierDropdowns === 'function') {
         return await window.populateSupplierDropdowns();
     }
-    
-    // Fallback - thực hiện populate trực tiếp
+
+    // Fallback - sử dụng window.DB (Firestore)
     try {
         const supplierDropdowns = document.querySelectorAll('.supplier-select, #product-supplier, [data-supplier-dropdown]');
         if (supplierDropdowns.length === 0) return;
-        
-        const db = await new Promise((resolve) => {
-            const checkDB = () => {
-                if (window.db) resolve(window.db);
-                else setTimeout(checkDB, 100);
-            };
-            checkDB();
-        });
-        
-        const tx = db.transaction('suppliers', 'readonly');
-        const store = tx.objectStore('suppliers');
-        const suppliers = await store.getAll();
-        
+        const suppliers = await window.DB.collection('suppliers').getAll();
         supplierDropdowns.forEach(dropdown => {
             const selectedValue = dropdown.value;
-            while (dropdown.options.length > 1) {
-                dropdown.remove(1);
-            }
-            
+            while (dropdown.options.length > 1) dropdown.remove(1);
             suppliers.forEach(supplier => {
                 const option = document.createElement('option');
                 option.value = supplier.id;
                 option.textContent = supplier.name;
                 dropdown.appendChild(option);
             });
-            
             if (selectedValue) dropdown.value = selectedValue;
         });
-        
-        console.log('Đã populate dropdown nhà cung cấp');
     } catch (error) {
         console.error('Lỗi khi populate dropdown nhà cung cấp:', error);
     }
@@ -823,41 +594,23 @@ async function populateProductDropdowns() {
     if (typeof window.populateProductDropdowns === 'function') {
         return await window.populateProductDropdowns();
     }
-    
-    // Fallback - thực hiện populate trực tiếp
+
+    // Fallback - sử dụng window.DB (Firestore)
     try {
         const productDropdowns = document.querySelectorAll('.product-select');
         if (productDropdowns.length === 0) return;
-        
-        const db = await new Promise((resolve) => {
-            const checkDB = () => {
-                if (window.db) resolve(window.db);
-                else setTimeout(checkDB, 100);
-            };
-            checkDB();
-        });
-        
-        const tx = db.transaction('products', 'readonly');
-        const store = tx.objectStore('products');
-        const products = await store.getAll();
-        
+        const products = await window.DB.collection('products').getAll();
         productDropdowns.forEach(dropdown => {
             const selectedValue = dropdown.value;
-            while (dropdown.options.length > 1) {
-                dropdown.remove(1);
-            }
-            
+            while (dropdown.options.length > 1) dropdown.remove(1);
             products.forEach(product => {
                 const option = document.createElement('option');
                 option.value = product.id;
                 option.textContent = `${product.name} (${product.code || 'Không mã'})`;
                 dropdown.appendChild(option);
             });
-            
             if (selectedValue) dropdown.value = selectedValue;
         });
-        
-        console.log('Đã populate dropdown sản phẩm');
     } catch (error) {
         console.error('Lỗi khi populate dropdown sản phẩm:', error);
     }
@@ -869,41 +622,23 @@ async function populateCustomerDropdowns() {
     if (typeof window.populateCustomerDropdowns === 'function') {
         return await window.populateCustomerDropdowns();
     }
-    
-    // Fallback - thực hiện populate trực tiếp
+
+    // Fallback - sử dụng window.DB (Firestore)
     try {
         const customerDropdowns = document.querySelectorAll('#order-customer, #payment-customer');
         if (customerDropdowns.length === 0) return;
-        
-        const db = await new Promise((resolve) => {
-            const checkDB = () => {
-                if (window.db) resolve(window.db);
-                else setTimeout(checkDB, 100);
-            };
-            checkDB();
-        });
-        
-        const tx = db.transaction('customers', 'readonly');
-        const store = tx.objectStore('customers');
-        const customers = await store.getAll();
-        
+        const customers = await window.DB.collection('customers').getAll();
         customerDropdowns.forEach(dropdown => {
             const selectedValue = dropdown.value;
-            while (dropdown.options.length > 1) {
-                dropdown.remove(1);
-            }
-            
+            while (dropdown.options.length > 1) dropdown.remove(1);
             customers.forEach(customer => {
                 const option = document.createElement('option');
                 option.value = customer.id;
                 option.textContent = customer.name;
                 dropdown.appendChild(option);
             });
-            
             if (selectedValue) dropdown.value = selectedValue;
         });
-        
-        console.log('Đã populate dropdown khách hàng');
     } catch (error) {
         console.error('Lỗi khi populate dropdown khách hàng:', error);
     }
