@@ -1,4 +1,4 @@
-﻿// initApp() is called by firebase-config.js after Google sign-in succeeds.
+// initApp() is called by firebase-config.js after Google sign-in succeeds.
 // DO NOT call here - auth gate handles timing.
 
 // Khởi tạo ứng dụng
@@ -34,93 +34,70 @@ async function initApp() {
 // Tải dữ liệu ban đầu
 async function loadInitialData() {
     try {
-        // Tải module khách hàng nếu hàm có sẵn
-        if (typeof window.loadCustomerModule === 'function') {
-            await window.loadCustomerModule();
-        } else {
-            console.warn('Module khách hàng chưa sẵn sàng - sẽ được khởi tạo sau');
+        // Chờ database sẵn sàng (Firestore shim)
+        let retryCount = 0;
+        while (!window.db && retryCount < 20) {
+            console.log('⏳ Chờ database sẵn sàng...');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            retryCount++;
         }
 
-        // Tải module nhà cung cấp nếu hàm có sẵn
-        if (typeof window.loadSupplierModule === 'function') {
-            await window.loadSupplierModule();
-        } else {
-            console.warn('Module nhà cung cấp chưa sẵn sàng - sẽ được khởi tạo sau');
+        if (!window.db) {
+            console.error('❌ Database không khả dụng sau 10 giây.');
+            return;
         }
 
-        // Tải module sản phẩm nếu hàm có sẵn
-        if (typeof window.loadProductModule === 'function') {
-            await window.loadProductModule();
-            // Đảm bảo populate supplier dropdown cho form sản phẩm
-            if (typeof populateSupplierDropdowns === 'function') {
-                await populateSupplierDropdowns();
+        // Danh sách các loader module
+        const moduleLoaders = [
+            { name: 'Khách hàng', func: 'loadCustomerModule' },
+            { name: 'Nhà cung cấp', func: 'loadSupplierModule' },
+            { name: 'Sản phẩm', func: 'loadProductModule' },
+            { name: 'Đơn hàng', func: 'loadOrderModule' },
+            { name: 'Chuyến hàng', func: 'loadTripModule' },
+            { name: 'Công nợ', func: 'loadDebtModule' },
+            { name: 'Nhân viên', func: 'loadEmployeeModule' }
+        ];
+
+        // Tải các module chính
+        for (const loader of moduleLoaders) {
+            if (typeof window[loader.func] === 'function') {
+                try {
+                    await window[loader.func]();
+                    console.log(`✅ Đã tải module ${loader.name}`);
+                } catch (e) {
+                    console.error(`❌ Lỗi khi thực thi ${loader.func}:`, e);
+                }
+            } else {
+                console.warn(`⏳ Loader ${loader.func} chưa sẵn sàng.`);
             }
-        } else {
-            console.warn('Module sản phẩm chưa sẵn sàng - sẽ được khởi tạo sau');
         }
 
-        // Tải module đơn hàng nếu hàm có sẵn
-        if (typeof window.loadOrderModule === 'function') {
-            await window.loadOrderModule();
-        } else {
-            console.warn('Module đơn hàng chưa sẵn sàng - sẽ được khởi tạo sau');
-            // Hiển thị danh sách đơn hàng (fallback cũ)
-            await displayOrders();
+        // Tải các module phụ trợ
+        const extraFunctions = ['displayPayments', 'displayReports', 'setupReportEventListeners'];
+        for (const funcName of extraFunctions) {
+            if (typeof window[funcName] === 'function') {
+                try {
+                    window[funcName]();
+                } catch (e) {
+                    console.error(`❌ Lỗi khi thực thi ${funcName}:`, e);
+                }
+            }
         }
 
-        // Tải module chuyến hàng nếu hàm có sẵn
-        if (typeof window.loadTripModule === 'function') {
-            await window.loadTripModule();
-        } else {
-            console.warn('Module chuyến hàng chưa sẵn sàng - sẽ được khởi tạo sau');
-            // Hiển thị danh sách chuyến hàng (fallback cũ)
-            await displayTrips();
-        }
-
-        // Hiển thị danh sách thanh toán
-        if (typeof displayPayments === 'function') {
-            await displayPayments();
-        } else {
-            console.warn('Function displayPayments chưa sẵn sàng - sẽ được khởi tạo sau');
-        }
-
-        // Tải module công nợ nếu hàm có sẵn
-        if (typeof window.loadDebtModule === 'function') {
-            await window.loadDebtModule();
-        } else {
-            console.warn('Module công nợ chưa sẵn sàng - sẽ được khởi tạo sau');
-        }
-
-        // Hiển thị báo cáo
-        if (typeof displayReports === 'function') {
-            await displayReports();
-        } else {
-            console.warn('Function displayReports chưa sẵn sàng - sẽ được khởi tạo sau');
-        }
-
-        // Thiết lập các event listener cho báo cáo
-        if (typeof setupReportEventListeners === 'function') {
-            setupReportEventListeners();
-        }
-
-        // Đảm bảo tất cả dropdown được populate sau khi load xong
-        setTimeout(async () => {
-            console.log('Đang populate tất cả dropdowns sau khi load xong...');
+        // Đảm bảo tất cả dropdown được populate
+        const populateAll = async () => {
+            console.log('🔄 Đang đồng bộ hóa dữ liệu dropdowns...');
             try {
-                if (typeof populateSupplierDropdowns === 'function') {
-                    await populateSupplierDropdowns();
-                }
-                if (typeof populateProductDropdowns === 'function') {
-                    await populateProductDropdowns();
-                }
-                if (typeof populateCustomerDropdowns === 'function') {
-                    await populateCustomerDropdowns();
-                }
-                console.log('Đã hoàn thành populate tất cả dropdowns');
-            } catch (error) {
-                console.error('Lỗi khi populate dropdowns:', error);
+                if (typeof populateSupplierDropdowns === 'function') await populateSupplierDropdowns();
+                if (typeof populateProductDropdowns === 'function') await populateProductDropdowns();
+                if (typeof populateCustomerDropdowns === 'function') await populateCustomerDropdowns();
+            } catch (e) {
+                console.warn('⚠️ Lỗi khi đồng bộ dropdowns:', e);
             }
-        }, 1000);
+        };
+
+        // Chạy ngay và chạy lại sau vài giây để chắc chắn
+        [500, 2000, 5000].forEach(delay => setTimeout(populateAll, delay));
     } catch (error) {
         console.error('Lỗi khi tải dữ liệu ban đầu:', error);
     }
@@ -228,6 +205,12 @@ function setupEventListeners() {
                 else if (targetId === '#trips-tab-pane' && typeof displayTrips === 'function') {
                     console.log('Tải lại dữ liệu chuyến hàng khi chuyển tab');
                     await displayTrips();
+                }
+
+                // Nếu là tab nhân viên
+                else if (targetId === '#employees-tab-pane' && typeof loadEmployeeModule === 'function') {
+                    console.log('Tải lại dữ liệu nhân viên khi chuyển tab');
+                    await loadEmployeeModule();
                 }
 
                 // Nếu là tab thanh toán
@@ -545,11 +528,12 @@ async function importDataFromJson(e) {
 
 // Hàm tiện ích để định dạng tiền tệ
 function formatCurrency(amount) {
+    if (amount === null || amount === undefined) return '0 K';
     return new Intl.NumberFormat('vi-VN', {
         style: 'decimal',
         minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-    }).format(amount) + ' VNĐ';
+        maximumFractionDigits: 2
+    }).format(amount) + ' K';
 }
 
 // Hàm tiện ích để định dạng ngày giờ
@@ -690,3 +674,14 @@ if (document.readyState === 'loading') {
     // Thêm delay để đảm bảo tất cả script đã load
     setTimeout(initApp, 500);
 }
+// Tải module nhân viên
+async function loadEmployeeModule() {
+    if (window.EmployeeModule) {
+        await EmployeeModule.events.init();
+        
+        // Update counts
+        const countEl = document.getElementById('employees-count');
+        if (countEl) countEl.textContent = EmployeeModule.data.currentEmployees.length;
+    }
+}
+window.loadEmployeeModule = loadEmployeeModule;

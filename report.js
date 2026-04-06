@@ -8,7 +8,8 @@ const ReportModule = {
             fromDate: '',
             toDate: ''
         },
-        isInitialized: false
+        isInitialized: false,
+        isLoading: false
     },
 
     // ===== CONFIG =====
@@ -18,41 +19,13 @@ const ReportModule = {
 
     // ===== UTILS =====
     utils: {
+        // Wait for database (Firestore shim - always ready after auth)
         async waitForDB() {
-            return new Promise((resolve) => {
-                if (window.db) {
-                    try {
-                        const tx = window.db.transaction('trips', 'readonly');
-                        tx.abort();
-                        resolve(window.db);
-                        return;
-                    } catch {}
-                }
-                let attempts = 0;
-                const maxAttempts = 150;
-                const checkInterval = setInterval(() => {
-                    attempts++;
-                    if (window.db) {
-                        try {
-                            const tx = window.db.transaction('trips', 'readonly');
-                            tx.abort();
-                            clearInterval(checkInterval);
-                            resolve(window.db);
-                        } catch {}
-                    } else if (attempts >= maxAttempts) {
-                        clearInterval(checkInterval);
-                        resolve(null);
-                    }
-                }, 100);
-                setTimeout(() => {
-                    clearInterval(checkInterval);
-                    resolve(null);
-                }, 15000);
-            });
+            return window.db || null;
         },
         formatCurrency(value) {
             if (typeof window.formatCurrency === 'function') return window.formatCurrency(value);
-            return value?.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) || '0 VNĐ';
+            return (value || 0).toLocaleString('vi-VN') + ' K';
         },
         formatDate(date) {
             if (typeof window.formatDate === 'function') return window.formatDate(date);
@@ -184,22 +157,27 @@ const ReportModule = {
     // ===== ACTIONS =====
     actions: {
         async displayReports() {
-            // Gọi renderFilter trước khi render bảng
-            ReportModule.ui.renderFilter();
-            // Lấy loại báo cáo đang được chọn
-            const reportType = document.querySelector('input[name="report-type"]:checked')?.value || 'trip';
-            switch (reportType) {
-                case 'trip':
-                    await ReportModule.actions.displayTripReports();
-                    break;
-                case 'month':
-                    await ReportModule.actions.displayMonthlyReports();
-                    break;
-                case 'year':
-                    await ReportModule.actions.displayYearlyReports();
-                    break;
-                default:
-                    await ReportModule.actions.displayTripReports();
+            if (ReportModule.data.isLoading) return;
+            ReportModule.data.isLoading = true;
+
+            try {
+                // Gọi renderFilter trước khi render bảng
+                ReportModule.ui.renderFilter();
+                // Lấy loại báo cáo đang được chọn
+                const reportType = document.querySelector('input[name="report-type"]:checked')?.value || 'trip';
+                switch (reportType) {
+                    case 'trip':
+                        await ReportModule.actions.displayTripReports();
+                        break;
+                    case 'month':
+                        await ReportModule.actions.displayMonthlyReports();
+                        break;
+                    case 'year':
+                        await ReportModule.actions.displayYearlyReports();
+                        break;
+                }
+            } finally {
+                ReportModule.data.isLoading = false;
             }
         },
         async displayTripReports() {
@@ -220,12 +198,13 @@ const ReportModule = {
                 if (reportTableHead) {
                     reportTableHead.innerHTML = `
                         <tr class="align-middle text-center table-primary">
-                            <th style="width:60px;">ID</th>
-                            <th style="min-width:180px;">Tên chuyến</th>
-                            <th style="width:120px;">Ngày</th>
-                            <th class="text-end" style="width:140px;">Tổng chi phí</th>
-                            <th class="text-end" style="width:140px;">Tổng doanh thu</th>
-                            <th class="text-end" style="width:140px;">Lợi nhuận gộp</th>
+                            <th style="min-width:140px;">Chuyến hàng</th>
+                            <th style="width:110px;">Ngày</th>
+                            <th class="text-end" style="width:130px;">Doanh thu</th>
+                            <th class="text-end" style="width:120px;">Tiền hàng</th>
+                            <th class="text-end" style="width:110px;">Phí VP</th>
+                            <th class="text-end" style="width:110px;">Lương NV</th>
+                            <th class="text-end" style="width:130px;">Lợi nhuận</th>
                         </tr>
                     `;
                 }
@@ -263,41 +242,51 @@ const ReportModule = {
                     noReportsMessage.style.display = 'none';
 
                     // Hiển thị báo cáo cho từng chuyến hàng
-                    let totalCost = 0;
-                    let totalRevenue = 0;
+                    let totalAllRevenue = 0;
+                    let totalAllPurchase = 0;
+                    let totalAllExpense = 0;
+                    let totalAllEmployee = 0;
+                    let totalAllProfit = 0;
                     
                     for (const trip of trips) {
+                        // Check if still on trip report to avoid race condition
+                        const currentType = document.querySelector('input[name="report-type"]:checked')?.value;
+                        if (currentType !== 'trip') break;
+
                         // Tính toán kết quả kinh doanh cho chuyến hàng
                         const result = await ReportModule.actions.calculateTripProfitLoss(trip.id);
 
                         // Cộng dồn để tính tổng
-                        totalCost += result.totalCost;
-                        totalRevenue += result.totalRevenue;
+                        totalAllRevenue += result.totalRevenue;
+                        totalAllPurchase += result.purchaseCost;
+                        totalAllExpense += result.expenseCost;
+                        totalAllEmployee += result.employeeCost;
+                        totalAllProfit += result.grossProfit;
 
                         const row = document.createElement('tr');
                         row.innerHTML = `
-                            <td class="text-center fw-bold">${trip.id}</td>
-                            <td class="text-start">${trip.tripName}</td>
-                            <td class="text-center">${ReportModule.utils.formatDate(trip.tripDate)}</td>
-                            <td class="text-end text-danger">${ReportModule.utils.formatCurrency(result.totalCost)}</td>
+                            <td class="text-start fw-bold small">${trip.tripName}</td>
+                            <td class="text-center small">${ReportModule.utils.formatDate(trip.tripDate)}</td>
                             <td class="text-end text-primary">${ReportModule.utils.formatCurrency(result.totalRevenue)}</td>
+                            <td class="text-end text-danger small">${ReportModule.utils.formatCurrency(result.purchaseCost)}</td>
+                            <td class="text-end text-danger small">${ReportModule.utils.formatCurrency(result.expenseCost)}</td>
+                            <td class="text-end text-danger small">${ReportModule.utils.formatCurrency(result.employeeCost)}</td>
                             <td class="text-end ${result.grossProfit >= 0 ? 'text-success' : 'text-danger'} fw-bold">${ReportModule.utils.formatCurrency(result.grossProfit)}</td>
                         `;
 
                         reportsList.appendChild(row);
                     }
 
-                    // Tính tổng lợi nhuận
-                    const totalProfit = totalRevenue - totalCost;
-
                     // Thêm dòng tổng cộng
                     const totalRow = document.createElement('tr');
                     totalRow.className = 'table-dark fw-bold';
                     totalRow.innerHTML = `
-                        <td colspan="3" class="text-end">Tổng cộng:</td>
-                        <td class="text-end text-danger">${ReportModule.utils.formatCurrency(totalCost)}</td>
-                        <td class="text-end text-primary">${ReportModule.utils.formatCurrency(totalRevenue)}</td>
-                        <td class="text-end ${totalProfit >= 0 ? 'text-success' : 'text-danger'}">${ReportModule.utils.formatCurrency(totalProfit)}</td>
+                        <td colspan="2" class="text-end">Tổng cộng:</td>
+                        <td class="text-end text-primary">${ReportModule.utils.formatCurrency(totalAllRevenue)}</td>
+                        <td class="text-end">${ReportModule.utils.formatCurrency(totalAllPurchase)}</td>
+                        <td class="text-end">${ReportModule.utils.formatCurrency(totalAllExpense)}</td>
+                        <td class="text-end">${ReportModule.utils.formatCurrency(totalAllEmployee)}</td>
+                        <td class="text-end ${totalAllProfit >= 0 ? 'text-success' : 'text-danger'}">${ReportModule.utils.formatCurrency(totalAllProfit)}</td>
                     `;
 
                     reportsList.appendChild(totalRow);
@@ -328,10 +317,11 @@ const ReportModule = {
                     reportTableHead.innerHTML = `
                         <tr class="align-middle text-center table-primary">
                             <th style="min-width:120px;">Tháng</th>
-                            <th style="width:120px;">Số chuyến hàng</th>
-                            <th class="text-end" style="width:140px;">Tổng chi phí</th>
-                            <th class="text-end" style="width:140px;">Tổng doanh thu</th>
-                            <th class="text-end" style="width:140px;">Lợi nhuận gộp</th>
+                            <th style="width:100px;">Số chuyến</th>
+                            <th class="text-end" style="width:130px;">Tổng chi phí</th>
+                            <th class="text-end" style="width:130px;">Lương NV</th>
+                            <th class="text-end" style="width:130px;">Doanh thu</th>
+                            <th class="text-end" style="width:130px;">Lợi nhuận</th>
                         </tr>
                     `;
                 }
@@ -375,17 +365,13 @@ const ReportModule = {
                         // Tính toán kết quả kinh doanh cho chuyến hàng
                         const result = await ReportModule.actions.calculateTripProfitLoss(trip.id);
 
-                        // Lưu kết quả vào đối tượng chuyến hàng để sử dụng sau này
-                        trip._totalCost = result.totalCost;
-                        trip._totalRevenue = result.totalRevenue;
-                        trip._grossProfit = result.grossProfit;
-
                         // Thêm hoặc cập nhật dữ liệu tháng
                         if (!monthlyData[monthKey]) {
                             monthlyData[monthKey] = {
                                 monthName,
                                 tripCount: 0,
                                 totalCost: 0,
+                                employeeCost: 0,
                                 totalRevenue: 0,
                                 grossProfit: 0
                             };
@@ -393,25 +379,27 @@ const ReportModule = {
 
                         monthlyData[monthKey].tripCount++;
                         monthlyData[monthKey].totalCost += result.totalCost;
+                        monthlyData[monthKey].employeeCost += (result.employeeCost || 0);
                         monthlyData[monthKey].totalRevenue += result.totalRevenue;
                         monthlyData[monthKey].grossProfit += result.grossProfit;
                     }
 
                     // Chuyển đối đối tượng thành mảng và sắp xếp theo tháng mới nhất trước
-                    const monthlyDataArray = Object.entries(monthlyData).map(([key, data]) => ({
-                        key,
-                        ...data
-                    }));
-
-                    monthlyDataArray.sort((a, b) => b.key.localeCompare(a.key));
+                    const sortedMonths = Object.keys(monthlyData).sort((a, b) => b.localeCompare(a));
 
                     // Hiển thị báo cáo theo tháng
-                    for (const monthData of monthlyDataArray) {
+                    for (const key of sortedMonths) {
+                        // Check if still on month report to avoid race condition
+                        const currentType = document.querySelector('input[name="report-type"]:checked')?.value;
+                        if (currentType !== 'month') break;
+
+                        const monthData = monthlyData[key];
                         const row = document.createElement('tr');
                         row.innerHTML = `
                             <td class="text-center">${monthData.monthName}</td>
                             <td class="text-center">${monthData.tripCount}</td>
-                            <td class="text-end text-danger">${ReportModule.utils.formatCurrency(monthData.totalCost)}</td>
+                            <td class="text-end text-danger small">${ReportModule.utils.formatCurrency(monthData.totalCost)}</td>
+                            <td class="text-end text-warning small">${ReportModule.utils.formatCurrency(monthData.employeeCost)}</td>
                             <td class="text-end text-primary">${ReportModule.utils.formatCurrency(monthData.totalRevenue)}</td>
                             <td class="text-end ${monthData.grossProfit >= 0 ? 'text-success' : 'text-danger'} fw-bold">${ReportModule.utils.formatCurrency(monthData.grossProfit)}</td>
                         `;
@@ -420,10 +408,19 @@ const ReportModule = {
                     }
 
                     // Tính tổng cộng
-                    const totalTripCount = monthlyDataArray.reduce((sum, month) => sum + month.tripCount, 0);
-                    const totalCost = monthlyDataArray.reduce((sum, month) => sum + month.totalCost, 0);
-                    const totalRevenue = monthlyDataArray.reduce((sum, month) => sum + month.totalRevenue, 0);
-                    const totalProfit = totalRevenue - totalCost;
+                    let totalTripCount = 0;
+                    let totalCost = 0;
+                    let totalEmployeeCost = 0;
+                    let totalRevenue = 0;
+                    let totalProfit = 0;
+
+                    for (const key in monthlyData) {
+                        totalTripCount += monthlyData[key].tripCount;
+                        totalCost += monthlyData[key].totalCost;
+                        totalEmployeeCost += monthlyData[key].employeeCost;
+                        totalRevenue += monthlyData[key].totalRevenue;
+                        totalProfit += monthlyData[key].grossProfit;
+                    }
 
                     // Thêm dòng tổng cộng
                     const totalRow = document.createElement('tr');
@@ -431,8 +428,9 @@ const ReportModule = {
                     totalRow.innerHTML = `
                         <td class="text-end">Tổng cộng</td>
                         <td class="text-center">${totalTripCount}</td>
-                        <td class="text-end text-danger">${ReportModule.utils.formatCurrency(totalCost)}</td>
-                        <td class="text-end text-primary">${ReportModule.utils.formatCurrency(totalRevenue)}</td>
+                        <td class="text-end">${ReportModule.utils.formatCurrency(totalCost)}</td>
+                        <td class="text-end">${ReportModule.utils.formatCurrency(totalEmployeeCost)}</td>
+                        <td class="text-end">${ReportModule.utils.formatCurrency(totalRevenue)}</td>
                         <td class="text-end ${totalProfit >= 0 ? 'text-success' : 'text-danger'}">${ReportModule.utils.formatCurrency(totalProfit)}</td>
                     `;
                     reportsList.appendChild(totalRow);
@@ -526,16 +524,14 @@ const ReportModule = {
                         yearlyData[yearKey].grossProfit += result.grossProfit;
                     }
 
-                    // Chuyển đối đối tượng thành mảng và sắp xếp theo năm mới nhất trước
-                    const yearlyDataArray = Object.entries(yearlyData).map(([key, data]) => ({
-                        key,
-                        ...data
-                    }));
-
-                    yearlyDataArray.sort((a, b) => b.key.localeCompare(a.key));
-
                     // Hiển thị báo cáo theo năm
-                    for (const yearData of yearlyDataArray) {
+                    const sortedYears = Object.keys(yearlyData).sort((a, b) => b.localeCompare(a));
+                    for (const key of sortedYears) {
+                        // Check if still on year report to avoid race condition
+                        const currentType = document.querySelector('input[name="report-type"]:checked')?.value;
+                        if (currentType !== 'year') break;
+
+                        const yearData = yearlyData[key];
                         const row = document.createElement('tr');
                         row.innerHTML = `
                             <td class="text-center">Năm ${yearData.year}</td>
@@ -549,10 +545,17 @@ const ReportModule = {
                     }
 
                     // Tính tổng cộng
-                    const totalTripCount = yearlyDataArray.reduce((sum, year) => sum + year.tripCount, 0);
-                    const totalCost = yearlyDataArray.reduce((sum, year) => sum + year.totalCost, 0);
-                    const totalRevenue = yearlyDataArray.reduce((sum, year) => sum + year.totalRevenue, 0);
-                    const totalProfit = totalRevenue - totalCost;
+                    let totalTripCount = 0;
+                    let totalCost = 0;
+                    let totalRevenue = 0;
+                    let totalProfit = 0;
+
+                    for (const key in yearlyData) {
+                        totalTripCount += yearlyData[key].tripCount;
+                        totalCost += yearlyData[key].totalCost;
+                        totalRevenue += yearlyData[key].totalRevenue;
+                        totalProfit += yearlyData[key].grossProfit;
+                    }
 
                     // Thêm dòng tổng cộng
                     const totalRow = document.createElement('tr');
@@ -579,14 +582,20 @@ const ReportModule = {
                 if (!db) return {
                     purchaseCost: 0,
                     expenseCost: 0,
+                    employeeCost: 0,
                     totalCost: 0,
                     totalRevenue: 0,
                     grossProfit: 0
                 };
-                const tx = db.transaction(['purchases', 'orders', 'tripExpenses'], 'readonly');
+                const tx = db.transaction(['trips', 'purchases', 'orders', 'tripExpenses'], 'readonly');
+                const tripStore = tx.objectStore('trips');
                 const purchaseStore = tx.objectStore('purchases');
                 const orderStore = tx.objectStore('orders');
                 const tripExpenseStore = tx.objectStore('tripExpenses');
+
+                // Lấy thông tin chuyến để lấy lương nhân viên
+                const trip = await tripStore.get(tripId);
+                const employeeCost = trip && trip.employees ? trip.employees.reduce((sum, emp) => sum + (emp.pay || 0), 0) : 0;
 
                 // Lấy tất cả chi phí nhập hàng của chuyến
                 const purchaseIndex = purchaseStore.index('tripId');
@@ -606,8 +615,8 @@ const ReportModule = {
                 // Tính tổng chi phí phát sinh
                 const expenseCost = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
-                // Tổng chi phí = chi phí nhập hàng + chi phí phát sinh
-                const totalCost = purchaseCost + expenseCost;
+                // Tổng chi phí = chi phí nhập hàng + chi phí phát sinh + lương nhân viên
+                const totalCost = purchaseCost + expenseCost + employeeCost;
 
                 // Tính tổng doanh thu từ các đơn hàng đã giao
                 let totalRevenue = 0;
@@ -623,6 +632,7 @@ const ReportModule = {
                 return {
                     purchaseCost,
                     expenseCost,
+                    employeeCost,
                     totalCost,
                     totalRevenue,
                     grossProfit

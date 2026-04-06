@@ -60,65 +60,29 @@ const TripModule = {
             return value;
         },
 
-        // Wait for database (preserve existing logic)
+        // Wait for database (Firestore shim - always ready after auth)
         async waitForDB() {
-            return new Promise((resolve) => {
-                if (window.db) {
-                    try {
-                        const tx = window.db.transaction('trips', 'readonly');
-                        tx.abort();
-                        resolve(window.db);
-                        return;
-                    } catch (error) {
-                        // Continue waiting
-                    }
-                }
-                
-                let attempts = 0;
-                const maxAttempts = 150;
-                
-                const checkInterval = setInterval(() => {
-                    attempts++;
-                    
-                    if (window.db) {
-                        try {
-                            const tx = window.db.transaction('trips', 'readonly');
-                            tx.abort();
-                            
-                            clearInterval(checkInterval);
-                            resolve(window.db);
-                        } catch (error) {
-                            // Continue waiting
-                        }
-                    } else if (attempts >= maxAttempts) {
-                        clearInterval(checkInterval);
-                        resolve(null);
-                    }
-                }, 100);
-                
-                setTimeout(() => {
-                    clearInterval(checkInterval);
-                    resolve(null);
-                }, 15000);
-            });
+            return window.db || null;
         },
 
         // Clean up modals
         cleanupAllModals() {
             try {
-                const backdrops = document.querySelectorAll('.modal-backdrop');
-                backdrops.forEach(backdrop => backdrop.remove());
-                
-                document.body.classList.remove('modal-open');
-                document.body.style.removeProperty('padding-right');
-                
                 const modalElements = document.querySelectorAll('.modal');
                 modalElements.forEach(modalEl => {
                     const instance = bootstrap.Modal.getInstance(modalEl);
                     if (instance) {
-                        instance.dispose();
+                        instance.hide();
                     }
                 });
+                
+                // If backdrops still exist after hide (e.g. from rapid triggers)
+                setTimeout(() => {
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => backdrop.remove());
+                    document.body.classList.remove('modal-open');
+                    document.body.style.removeProperty('padding-right');
+                }, 100);
                 
                 console.log('🧹 Cleaned up all modals');
             } catch (error) {
@@ -135,11 +99,13 @@ const TripModule = {
 
         // Format currency (preserve existing logic)
         formatCurrency(amount) {
-            if (!amount && amount !== 0) return '0 VNĐ';
+            if (typeof window.formatCurrency === 'function') return window.formatCurrency(amount);
+            if (!amount && amount !== 0) return '0 K';
             return new Intl.NumberFormat('vi-VN', {
-                style: 'currency',
-                currency: 'VND'
-            }).format(amount);
+                style: 'decimal',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            }).format(amount) + ' K';
         },
 
         // Get trip status badge class (preserve existing logic)
@@ -164,47 +130,38 @@ const TripModule = {
     // ===== BUSINESS LOGIC (PRESERVED FROM ORIGINAL) =====
     businessLogic: {
         // Preserved: Calculate correct profit function
-        calculateCorrectProfit(linkedOrders, tripExpenses) {
-    let totalRevenue = 0;
-    let totalCOGS = 0; // Cost of Goods Sold - Giá vốn hàng bán
-    let totalPaymentReceived = 0;
-    
-    // Tính doanh thu, giá vốn và tiền đã thu
-    for (const order of linkedOrders) {
-        if (order.items && order.items.length > 0) {
-            for (const item of order.items) {
-                // Doanh thu từ item này
-                const itemRevenue = item.qty * item.sellingPrice;
-                totalRevenue += itemRevenue;
-                
-                // Giá vốn từ item này (từ purchasePrice)
-                const itemCOGS = item.qty * (item.purchasePrice || 0);
-                totalCOGS += itemCOGS;
+        calculateCorrectProfit(linkedOrders, tripExpenses, assignedEmployees = []) {
+            let totalRevenue = 0;
+            let totalCOGS = 0;
+            let totalPaymentReceived = 0;
+            
+            for (const order of linkedOrders) {
+                if (order.items && order.items.length > 0) {
+                    for (const item of order.items) {
+                        totalRevenue += item.qty * item.sellingPrice;
+                        totalCOGS += item.qty * (item.purchasePrice || 0);
+                    }
+                }
+                totalPaymentReceived += order.paymentReceived || 0;
             }
+            
+            // Tổng chi phí vận hành (bao gồm chi phí phát sinh và lương nhân viên theo chuyến)
+            const expenseSum = tripExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+            const employeeSum = assignedEmployees.reduce((sum, emp) => sum + (emp.pay || 0), 0);
+            const totalExpenses = expenseSum + employeeSum;
+            
+            const grossProfit = totalRevenue - totalCOGS;
+            const netProfit = grossProfit - totalExpenses;
+            
+            return {
+                totalRevenue,
+                totalCOGS,
+                grossProfit,
+                totalExpenses,
+                netProfit,
+                totalPaymentReceived
+            };
         }
-        
-        // Tiền đã thu
-        totalPaymentReceived += order.paymentReceived || 0;
-    }
-    
-    // Tính tổng chi phí vận hành
-    const totalExpenses = tripExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-    
-    // Lợi nhuận gộp thực = Doanh thu - Giá vốn
-    const grossProfit = totalRevenue - totalCOGS;
-    
-    // Lợi nhuận ròng = Lợi nhuận gộp - Chi phí vận hành
-    const netProfit = grossProfit - totalExpenses;
-    
-    return {
-        totalRevenue,        // Tổng doanh thu
-        totalCOGS,          // Tổng giá vốn
-        grossProfit,        // Lợi nhuận gộp (chưa trừ chi phí VH)
-        totalExpenses,      // Tổng chi phí vận hành
-        netProfit,          // Lợi nhuận ròng (đã trừ tất cả)
-        totalPaymentReceived // Tổng tiền đã thu
-    };
-}
     },
 
     // ===== VALIDATION SYSTEM =====
@@ -258,7 +215,7 @@ const TripModule = {
             const trimmedName = name.trim().toLowerCase();
             return TripModule.data.currentTrips.some(trip => 
                 trip.tripName.toLowerCase() === trimmedName && 
-                trip.id !== excludeId
+                trip.id != excludeId
             );
         },
 
@@ -321,6 +278,7 @@ const TripModule = {
                     tripDate: tripData.tripDate,
                     destination: tripData.destination ? tripData.destination.trim() : '',
                     note: tripData.note ? tripData.note.trim() : '',
+                    employees: tripData.employees || [],
                     status: tripData.status || 'Mới tạo',
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
@@ -342,6 +300,8 @@ const TripModule = {
 
         // Update trip (preserve existing logic)
         async update(tripId, tripData) {
+            tripId = parseInt(tripId);
+
             try {
                 const db = await TripModule.utils.waitForDB();
                 if (!db) {
@@ -368,6 +328,7 @@ const TripModule = {
                     tripDate: tripData.tripDate,
                     destination: tripData.destination ? tripData.destination.trim() : '',
                     note: tripData.note ? tripData.note.trim() : '',
+                    employees: tripData.employees || [],
                     status: tripData.status || existingTrip.status,
                     updated_at: new Date().toISOString()
                 };
@@ -390,6 +351,8 @@ const TripModule = {
 
         // Delete trip (preserve existing logic)
         async delete(tripId) {
+            tripId = parseInt(tripId);
+
             try {
                 const db = await TripModule.utils.waitForDB();
                 if (!db) {
@@ -412,6 +375,8 @@ const TripModule = {
 
         // Get single trip
         async get(tripId) {
+            tripId = parseInt(tripId);
+
             try {
                 const db = await TripModule.utils.waitForDB();
                 if (!db) return null;
@@ -623,16 +588,17 @@ const TripModule = {
                 row.innerHTML = `
                     <td class="text-center fw-bold">${trip.id}</td>
                     <td class="text-start">
-                        <div class="fw-bold text-primary">${TripModule.utils.safeValue(trip.name)}</div>
+                        <div class="fw-bold text-primary">${TripModule.utils.safeValue(trip.tripName || trip.name)}</div>
                     </td>
-                    <td class="text-center">${TripModule.utils.formatDate(trip.date)}</td>
+                    <td class="text-center">${TripModule.utils.formatDate(trip.tripDate || trip.date)}</td>
                     <td class="text-center">
                         <span class="badge ${TripModule.utils.getTripStatusBadgeClass(trip.status)}">${trip.status}</span>
                     </td>
                     <td class="text-center">
                         <div class="btn-group" role="group">
-                            <button class="btn btn-sm btn-outline-primary" onclick="TripModule.actions.edit(${trip.id})" data-bs-toggle="modal" data-bs-target="#tripModal"><i class="bi bi-pencil"></i></button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="TripModule.actions.confirmDelete(${trip.id})"><i class="bi bi-trash"></i></button>
+                            <button class="btn btn-sm btn-outline-info" onclick="TripModule.legacy.showTripDetail('${trip.id}')" title="Chi tiết"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="TripModule.actions.edit('${trip.id}')" data-bs-toggle="modal" data-bs-target="#tripModal" title="Sửa"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="TripModule.actions.confirmDelete('${trip.id}')" title="Xóa"><i class="bi bi-trash"></i></button>
                         </div>
                     </td>
                 `;
@@ -653,7 +619,7 @@ const TripModule = {
                 card.innerHTML = `
                     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                         <div class="fw-bold">
-                            <i class="bi bi-truck me-2"></i>${TripModule.utils.safeValue(trip.tripName)}
+                            <i class="bi bi-truck me-2"></i>${TripModule.utils.safeValue(trip.tripName || trip.name)}
                         </div>
                         <span class="badge bg-light text-dark">#${trip.id}</span>
                     </div>
@@ -695,13 +661,13 @@ const TripModule = {
                             ` : ''}
                         </div>
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <button class="btn btn-outline-info btn-sm" onclick="TripModule.legacy.showTripDetail(${trip.id})">
+                            <button class="btn btn-outline-info btn-sm" onclick="TripModule.legacy.showTripDetail('${trip.id}')">
                                 <i class="bi bi-eye me-1"></i>Chi tiết
                             </button>
-                            <button class="btn btn-outline-primary btn-sm" onclick="TripModule.actions.edit(${trip.id})">
+                            <button class="btn btn-outline-primary btn-sm" onclick="TripModule.actions.edit('${trip.id}')">
                                 <i class="bi bi-pencil me-1"></i>Sửa
                             </button>
-                            <button class="btn btn-outline-danger btn-sm" onclick="TripModule.actions.confirmDelete(${trip.id})">
+                            <button class="btn btn-outline-danger btn-sm" onclick="TripModule.actions.confirmDelete('${trip.id}')">
                                 <i class="bi bi-trash me-1"></i>Xóa
                             </button>
                         </div>
@@ -876,6 +842,71 @@ const TripModule = {
                     }, 200);
                 });
             });
+        },
+
+        // Populate employee selection in trip modal
+        async populateEmployeeSelection(assignedEmployees = []) {
+            const container = document.getElementById('trip-employee-selection');
+            if (!container) return;
+
+            if (!window.EmployeeModule) {
+                container.innerHTML = '<p class="text-danger small">Lỗi: Module nhân viên chưa tải.</p>';
+                return;
+            }
+
+            // Ensure employees are loaded
+            if (window.EmployeeModule.data.currentEmployees.length === 0) {
+                await window.EmployeeModule.database.getAll().then(emps => {
+                    window.EmployeeModule.data.currentEmployees = emps;
+                });
+            }
+
+            const employees = window.EmployeeModule.data.currentEmployees;
+
+            if (employees.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-2">
+                        <p class="text-muted small mb-0">Chưa có nhân viên nào.</p>
+                        <a href="#" class="small" onclick="bootstrap.Modal.getInstance(document.getElementById('tripModal')).hide(); document.getElementById('employees-tab').click();">Thêm nhân viên ngay</a>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = employees.map(emp => {
+                const assigned = assignedEmployees.find(ae => String(ae.employeeId) === String(emp.id));
+                const isChecked = assigned ? 'checked' : '';
+                const payValue = assigned ? assigned.pay : (emp.baseSalaryPerTrip || 0);
+
+                return `
+                    <div class="employee-item d-flex align-items-center gap-3 p-2 rounded bg-white shadow-sm border mb-2">
+                        <div class="form-check mb-0">
+                            <input class="form-check-input employee-checkbox" type="checkbox" value="${emp.id}" id="emp-check-${emp.id}" ${isChecked}>
+                            <label class="form-check-label fw-medium" for="emp-check-${emp.id}">
+                                ${emp.name} <small class="text-muted">(${window.EmployeeModule.config.roles[emp.role] || emp.role})</small>
+                            </label>
+                        </div>
+                        <div class="ms-auto" style="width: 150px;">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">Pay</span>
+                                <input type="number" class="form-control employee-pay" step="any" 
+                                       data-emp-id="${emp.id}" 
+                                       value="${payValue}" 
+                                       placeholder="Số tiền" 
+                                       ${isChecked ? '' : 'disabled'}>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Add event listeners to toggle inputs
+            container.querySelectorAll('.employee-checkbox').forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    const payInput = container.querySelector(`.employee-pay[data-emp-id="${e.target.value}"]`);
+                    if (payInput) payInput.disabled = !e.target.checked;
+                });
+            });
         }
     },
 
@@ -907,11 +938,14 @@ const TripModule = {
                 submitButton.textContent = 'Tạo chuyến hàng';
             }
 
+            // Populate employees
+            TripModule.ui.populateEmployeeSelection();
+
             this.clearValidationErrors();
         },
 
         // Setup for edit mode
-        setupEdit(trip) {
+        async setupEdit(trip) {
             const form = document.getElementById('trip-form');
             const modalTitle = document.getElementById('tripModalLabel');
             const submitButton = document.getElementById('trip-submit-btn');
@@ -938,6 +972,9 @@ const TripModule = {
             if (submitButton) {
                 submitButton.textContent = 'Cập nhật chuyến hàng';
             }
+
+            // Populate employees with assigned data (MUST await because it might fetch from DB)
+            await TripModule.ui.populateEmployeeSelection(trip.employees || []);
 
             this.clearValidationErrors();
         },
@@ -1063,7 +1100,25 @@ const TripModule = {
                 tripName: document.getElementById('trip-name').value.trim(),
                 tripDate: document.getElementById('trip-date').value,
                 destination: document.getElementById('trip-destination').value.trim(),
-                note: document.getElementById('trip-note').value.trim()
+                note: document.getElementById('trip-note').value.trim(),
+                employees: (() => {
+                    const containers = document.querySelectorAll('#trip-employee-selection .employee-item');
+                    const selected = [];
+                    containers.forEach(item => {
+                        const cb = item.querySelector('.employee-checkbox');
+                        if (cb && cb.checked) {
+                            const empId = cb.value;
+                            const payInput = item.querySelector('.employee-pay');
+                            const label = item.querySelector('label');
+                            selected.push({
+                                employeeId: empId,
+                                pay: payInput ? parseFloat(payInput.value || 0) : 0,
+                                name: label ? label.textContent.split(' (')[0].trim() : 'Unknown'
+                            });
+                        }
+                    });
+                    return selected;
+                })()
             };
 
             // Clear validation errors
@@ -1077,6 +1132,7 @@ const TripModule = {
             }
 
             try {
+                console.log('💾 Đang lưu chuyến hàng với dữ liệu:', formData);
                 const id = await TripModule.database.add(formData);
                 if (id) {
                     // Close modal
@@ -1106,7 +1162,7 @@ const TripModule = {
             // Cleanup any existing modals first
             TripModule.utils.cleanupAllModals();
 
-            TripModule.form.setupEdit(trip);
+            await TripModule.form.setupEdit(trip);
             
             // Show modal
             const modal = new bootstrap.Modal(document.getElementById('tripModal'));
@@ -1116,13 +1172,31 @@ const TripModule = {
         // Update trip
         async update() {
             const form = document.getElementById('trip-form');
-            const editId = parseInt(form.getAttribute('data-edit-id'));
+            const editId = form.getAttribute('data-edit-id');
             
             const formData = {
                 tripName: document.getElementById('trip-name').value.trim(),
                 tripDate: document.getElementById('trip-date').value,
                 destination: document.getElementById('trip-destination').value.trim(),
-                note: document.getElementById('trip-note').value.trim()
+                note: document.getElementById('trip-note').value.trim(),
+                employees: (() => {
+                    const containers = document.querySelectorAll('#trip-employee-selection .employee-item');
+                    const selected = [];
+                    containers.forEach(item => {
+                        const cb = item.querySelector('.employee-checkbox');
+                        if (cb && cb.checked) {
+                            const empId = cb.value;
+                            const payInput = item.querySelector('.employee-pay');
+                            const label = item.querySelector('label');
+                            selected.push({
+                                employeeId: empId,
+                                pay: payInput ? parseFloat(payInput.value || 0) : 0,
+                                name: label ? label.textContent.split(' (')[0].trim() : 'Unknown'
+                            });
+                        }
+                    });
+                    return selected;
+                })()
             };
 
             // Clear validation errors
@@ -1136,6 +1210,7 @@ const TripModule = {
             }
 
             try {
+                console.log('🔄 Đang cập nhật chuyến hàng ID:', editId, 'với dữ liệu:', formData);
                 const success = await TripModule.database.update(editId, formData);
                 if (success) {
                     // Close modal
@@ -1156,7 +1231,7 @@ const TripModule = {
 
         // Confirm delete
         confirmDelete(tripId) {
-            const trip = TripModule.data.currentTrips.find(t => t.id === tripId);
+            const trip = TripModule.data.currentTrips.find(t => t.id == tripId);
             if (!trip) return;
 
             TripModule.data.tripToDelete = trip;
@@ -1195,6 +1270,12 @@ const TripModule = {
                     // Reload and refresh
                     await TripModule.database.loadAll();
                     await TripModule.refresh();
+
+                    // Cập nhật công nợ nếu module có sẵn
+                    if (window.DebtModule && window.DebtModule.actions && typeof window.DebtModule.actions.displayCustomerDebts === 'function') {
+                        await window.DebtModule.actions.displayCustomerDebts();
+                    }
+
                     TripModule.ui.showSuccess('Xóa chuyến hàng thành công!');
                 }
             } catch (error) {
@@ -1445,8 +1526,8 @@ const TripModule = {
 
 // Preserved: Original functions with full logic
 // Hàm tính lợi nhuận chính xác (bao gồm giá vốn) - PRESERVED
-function calculateCorrectProfit(linkedOrders, tripExpenses) {
-    return TripModule.businessLogic.calculateCorrectProfit(linkedOrders, tripExpenses);
+function calculateCorrectProfit(linkedOrders, tripExpenses, assignedEmployees = []) {
+    return TripModule.businessLogic.calculateCorrectProfit(linkedOrders, tripExpenses, assignedEmployees);
 }
 
 // Thêm chuyến hàng mới - PRESERVED
@@ -1466,6 +1547,8 @@ async function deleteTrip(tripId) {
 
 // Preserved: Original showTripDetail function (with all complex logic)
 async function showTripDetail(tripId) {
+    tripId = parseInt(tripId);
+
     try {
         // Ensure database is ready
         if (!window.db) {
@@ -1489,13 +1572,14 @@ async function showTripDetail(tripId) {
         }
 
         // Lấy chi phí của chuyến này
-        const tripExpenses = expenses.filter(exp => exp.tripId === tripId);
+        const tripExpenses = expenses ? expenses.filter(exp => exp && exp.tripId === tripId) : [];
         
         // Lấy đơn hàng đã liên kết với chuyến này
-        const linkedOrders = allOrders.filter(order => order.deliveredTripId === tripId);
+        const linkedOrders = allOrders ? allOrders.filter(order => order && order.deliveredTripId === tripId) : [];
         
-        // Tính lợi nhuận chính xác với giá vốn
-        const profitData = calculateCorrectProfit(linkedOrders, tripExpenses);
+        // Tính lợi nhuận chính xác (bao gồm giá vốn và lương nhân viên)
+        const tripEmployees = (trip.employees || []).filter(emp => emp !== null);
+        const profitData = calculateCorrectProfit(linkedOrders, tripExpenses, tripEmployees);
         const { totalRevenue, totalCOGS, grossProfit, totalExpenses, netProfit, totalPaymentReceived } = profitData;
 
         // Xây dựng nội dung modal
@@ -1506,7 +1590,7 @@ async function showTripDetail(tripId) {
                     <div class="card bg-primary text-white">
                         <div class="card-body text-center">
                             <h6 class="card-title">Doanh thu</h6>
-                            <p class="card-text fs-5">${formatCurrency(totalRevenue)}</p>
+                            <p class="card-text fs-5" id="summary-revenue">${formatCurrency(totalRevenue)}</p>
             </div>
                     </div>
                 </div>
@@ -1514,7 +1598,7 @@ async function showTripDetail(tripId) {
                     <div class="card bg-warning text-dark">
                         <div class="card-body text-center">
                             <h6 class="card-title">Giá vốn</h6>
-                            <p class="card-text fs-5">${formatCurrency(totalCOGS)}</p>
+                            <p class="card-text fs-5" id="summary-cogs">${formatCurrency(totalCOGS)}</p>
                         </div>
                     </div>
                 </div>
@@ -1522,7 +1606,7 @@ async function showTripDetail(tripId) {
                     <div class="card bg-info text-white">
                         <div class="card-body text-center">
                             <h6 class="card-title">LN Gộp</h6>
-                            <p class="card-text fs-5">${formatCurrency(grossProfit)}</p>
+                            <p class="card-text fs-5" id="summary-gross-profit">${formatCurrency(grossProfit)}</p>
                         </div>
                     </div>
                 </div>
@@ -1530,7 +1614,7 @@ async function showTripDetail(tripId) {
                     <div class="card bg-danger text-white">
                         <div class="card-body text-center">
                             <h6 class="card-title">Chi phí VH</h6>
-                            <p class="card-text fs-5">${formatCurrency(totalExpenses)}</p>
+                             <p class="card-text fs-5" id="summary-trip-expenses">${formatCurrency(totalExpenses)}</p>
                         </div>
                     </div>
                 </div>
@@ -1538,7 +1622,7 @@ async function showTripDetail(tripId) {
                     <div class="card ${netProfit >= 0 ? 'bg-success' : 'bg-danger'} text-white">
                         <div class="card-body text-center">
                             <h6 class="card-title">LN Ròng</h6>
-                            <p class="card-text fs-5">${formatCurrency(netProfit)}</p>
+                             <p class="card-text fs-5" id="summary-net-profit">${formatCurrency(netProfit)}</p>
                         </div>
                     </div>
                 </div>
@@ -1555,13 +1639,16 @@ async function showTripDetail(tripId) {
             <!-- Navigation tabs -->
             <ul class="nav nav-tabs" id="tripDetailTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="linked-orders-tab" data-bs-toggle="tab" data-bs-target="#linked-orders-pane" type="button" role="tab">Đơn hàng đã liên kết</button>
+                    <button class="nav-link active" id="link-orders-tab" data-bs-toggle="tab" data-bs-target="#link-orders-pane" type="button" role="tab">Liên kết đơn hàng</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="linked-orders-tab" data-bs-toggle="tab" data-bs-target="#linked-orders-pane" type="button" role="tab">Đơn hàng đã liên kết</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="trip-employees-tab" data-bs-toggle="tab" data-bs-target="#trip-employees-pane" type="button" role="tab">Nhân viên</button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="trip-expenses-tab" data-bs-toggle="tab" data-bs-target="#trip-expenses-pane" type="button" role="tab">Chi phí</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="link-orders-tab" data-bs-toggle="tab" data-bs-target="#link-orders-pane" type="button" role="tab">Liên kết đơn hàng</button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="invoice-tab" data-bs-toggle="tab" data-bs-target="#invoice-tab-pane" type="button" role="tab">Hóa đơn</button>
@@ -1570,13 +1657,18 @@ async function showTripDetail(tripId) {
 
             <div class="tab-content mt-3" id="tripDetailTabContent">
                 <!-- Tab đơn hàng đã liên kết -->
-                <div class="tab-pane fade show active" id="linked-orders-pane" role="tabpanel">
+                <div class="tab-pane fade" id="linked-orders-pane" role="tabpanel">
                     <div class="card">
                         <div class="card-header">
                             <h5 class="card-title mb-0">Đơn hàng đã liên kết - Quản lý thanh toán</h5>
                         </div>
                         <div class="card-body">
         `;
+
+        // Fetch all trip payments for dynamic calculation
+        const paymentStore = tx.objectStore('payments');
+        const allTripPayments = await paymentStore.getAll();
+        const tripPayments = allTripPayments.filter(p => String(p.tripId) === String(tripId));
 
         if (linkedOrders.length === 0) {
             content += '<div class="alert alert-info">Chưa có đơn hàng nào được liên kết với chuyến hàng này.</div>';
@@ -1608,7 +1700,9 @@ async function showTripDetail(tripId) {
                     orderTotal = order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
                 }
                 
-                const paymentReceived = order.paymentReceived || 0;
+                // Tính toán sum payments THEO DB thay vì fix cứng trong order
+                const orderPayments = tripPayments.filter(p => String(p.orderId) === String(order.id));
+                const paymentReceived = orderPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
                 const remainingDebt = orderTotal - paymentReceived;
 
                 content += `
@@ -1661,6 +1755,59 @@ async function showTripDetail(tripId) {
                 </div>
                         </div>
 
+                <!-- Tab nhân viên -->
+                <div class="tab-pane fade" id="trip-employees-pane" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Nhân viên tham gia chuyến hàng</h5>
+                            <span class="badge bg-primary">${(trip.employees || []).length} người</span>
+                        </div>
+                        <div class="card-body">
+                            ${(trip.employees && trip.employees.length > 0) ? `
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Nhân viên</th>
+                                                <th class="text-end">Tiền công/Chuyến</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${(trip.employees || []).filter(emp => emp !== null).map(emp => `
+                                                <tr>
+                                                    <td>
+                                                        <div class="fw-bold text-primary">${emp.name || 'N/A'}</div>
+                                                        <small class="text-muted">ID: ${emp.employeeId || 'N/A'}</small>
+                                                    </td>
+                                                    <td class="text-end fw-bold text-success">
+                                                        ${formatCurrency(emp.pay || 0)}
+                                                    </td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                        <tfoot class="table-light">
+                                            <tr>
+                                                <th class="fw-bold">Tổng cộng tiền công:</th>
+                                                <th class="text-end text-danger fw-bold fs-5">
+                                                    ${formatCurrency((trip.employees || []).filter(e => e !== null).reduce((sum, e) => sum + (e.pay || 0), 0))}
+                                                </th>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            ` : `
+                                <div class="text-center py-4 bg-light rounded shadow-sm border border-dashed">
+                                    <i class="bi bi-people text-muted fs-1"></i>
+                                    <p class="mt-2 text-muted mb-0">Chưa có nhân viên nào được gán cho chuyến này.</p>
+                                    <button class="btn btn-sm btn-outline-primary mt-3" onclick="bootstrap.Modal.getInstance(document.getElementById('tripDetailModal')).hide(); TripModule.actions.edit(${trip.id});">
+                                        <i class="bi bi-person-plus me-1"></i>Gán nhân viên ngay
+                                    </button>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Tab chi phí -->
                 <div class="tab-pane fade" id="trip-expenses-pane" role="tabpanel">
                         <div class="row">
@@ -1687,8 +1834,8 @@ async function showTripDetail(tripId) {
                             </select>
                         </div>
                         <div class="mb-3">
-                                <label for="expense-amount" class="form-label">Số tiền (VNĐ)</label>
-                                <input type="number" class="form-control" id="expense-amount" min="0" step="0.01" required>
+                                <label for="expense-amount" class="form-label">Số tiền (K)</label>
+                                <input type="number" class="form-control" id="expense-amount" min="0" step="any" required>
                         </div>
                         <div class="mb-3">
                                             <label for="expense-description" class="form-label">Mô tả</label>
@@ -1709,7 +1856,7 @@ async function showTripDetail(tripId) {
                                 <div class="card-header">
                                     <h5 class="card-title mb-0">Danh sách chi phí</h5>
                                 </div>
-                                <div class="card-body">
+                                <div class="card-body" id="expense-list-container">
         `;
 
         if (tripExpenses.length === 0) {
@@ -1766,7 +1913,7 @@ async function showTripDetail(tripId) {
                 </div>
 
                 <!-- Tab liên kết đơn hàng -->
-                <div class="tab-pane fade" id="link-orders-pane" role="tabpanel">
+                <div class="tab-pane fade show active" id="link-orders-pane" role="tabpanel">
                     <div class="card">
                         <div class="card-header">
                             <h5 class="card-title mb-0">Liên kết đơn hàng mới</h5>
@@ -1784,17 +1931,27 @@ async function showTripDetail(tripId) {
         `;
 
         // Hiển thị modal
-        document.getElementById('trip-detail-content').innerHTML = content;
-        document.getElementById('tripDetailModalLabel').textContent = `Chi tiết chuyến hàng: ${trip.tripName}`;
-        
-        // Cleanup any existing modals first
-        if (typeof TripModule !== 'undefined' && TripModule.utils) {
-            TripModule.utils.cleanupAllModals();
+        const modalEl = document.getElementById('tripDetailModal');
+        if (!modalEl) {
+            console.error('❌ Error: tripDetailModal element not found!');
+            return;
         }
+
+        document.getElementById('trip-detail-content').innerHTML = content;
+        const modalLabel = document.getElementById('tripDetailModalLabel');
+        if (modalLabel) modalLabel.textContent = `Chi tiết chuyến hàng: ${trip.tripName}`;
         
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('tripDetailModal'));
-        modal.show();
+        // Use existing instance if available, otherwise create new one
+        let modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if (modalInstance) {
+            // If already exists, just refresh content (already done via innerHTML)
+            // But we might need to show if it was hidden
+            modalInstance.show();
+        } else {
+            // Create new instance
+            modalInstance = new bootstrap.Modal(modalEl);
+            modalInstance.show();
+        }
 
         // Load dữ liệu cho tab liên kết đơn hàng
         await updateTripDetailOrders(tripId);
@@ -1877,6 +2034,8 @@ window.TripModule = TripModule;
 
 // Preserved: Link orders to trip (original business logic)
 async function linkOrdersToTrip(tripId, orderIds) {
+    tripId = parseInt(tripId);
+
     try {
         const tx = db.transaction('orders', 'readwrite');
         const store = tx.objectStore('orders');
@@ -1938,6 +2097,12 @@ async function linkOrdersToTrip(tripId, orderIds) {
             if (typeof TripModule !== 'undefined' && TripModule.refresh) {
                 await TripModule.refresh();
             }
+
+            // Đồng bộ công nợ nếu module có sẵn
+            if (window.DebtModule && window.DebtModule.actions && typeof window.DebtModule.actions.displayCustomerDebts === 'function') {
+                console.log('🔄 Đồng bộ: Đang cập nhật lại công nợ sau khi liên kết đơn hàng...');
+                await window.DebtModule.actions.displayCustomerDebts();
+            }
         } else {
             if (typeof TripModule !== 'undefined' && TripModule.ui && TripModule.ui.showError) {
                 TripModule.ui.showError('Không có đơn hàng nào được liên kết. Vui lòng kiểm tra lại.');
@@ -1960,6 +2125,8 @@ async function linkOrdersToTrip(tripId, orderIds) {
 
 // Preserved: Update trip detail orders (original business logic)
 async function updateTripDetailOrders(tripId) {
+    tripId = parseInt(tripId);
+
     try {
         // Lấy thông tin chuyến hàng và đơn hàng
         const tx = db.transaction(['orders', 'customers'], 'readonly');
@@ -2108,6 +2275,8 @@ async function updateTripDetailOrders(tripId) {
 
 // Preserved: Unlink order from trip (original business logic)
 async function unlinkOrderFromTrip(orderId) {
+    orderId = parseInt(orderId);
+
     try {
         // Sử dụng confirm hiện đại
         let confirmed = false;
@@ -2152,7 +2321,13 @@ async function unlinkOrderFromTrip(orderId) {
             if (typeof window.OrderModule !== 'undefined' && window.OrderModule.refresh) {
                 await window.OrderModule.refresh();
             } else if (typeof displayOrders === 'function') {
-            await displayOrders();
+                await displayOrders();
+            }
+
+            // Đồng bộ công nợ nếu module có sẵn (Vì hủy liên kết có thể thay đổi trạng thái nợ của đơn)
+            if (window.DebtModule && window.DebtModule.actions && typeof window.DebtModule.actions.displayCustomerDebts === 'function') {
+                console.log('🔄 Đồng bộ: Đang cập nhật lại công nợ sau khi hủy liên kết đơn hàng...');
+                await window.DebtModule.actions.displayCustomerDebts();
             }
         }
     } catch (error) {
@@ -2198,9 +2373,9 @@ function openPaymentModal(orderId, tripId, customerName, orderTotal, currentPaym
                         </div>
                         <form id="payment-form" data-order-id="${orderId}" data-trip-id="${tripId}">
                             <div class="mb-3">
-                                <label for="payment-amount" class="form-label">Số tiền thanh toán (VNĐ)</label>
+                                <label for="payment-amount" class="form-label">Số tiền thanh toán (K)</label>
                                 <input type="number" class="form-control" id="payment-amount" 
-                                       min="0" max="${remainingDebt}" value="${remainingDebt}" required>
+                                       min="0" max="${remainingDebt}" value="${remainingDebt}" required step="any">
                                 <div class="form-text">Tối đa: ${formatCurrency(remainingDebt)}</div>
                             </div>
                             <div class="mb-3">
@@ -2308,13 +2483,19 @@ async function processPayment(orderId, tripId, amount, method, note) {
         }
 
         // Tính tổng tiền đơn hàng
-        const orderTotal = order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
-        const currentPayment = order.paymentReceived || 0;
+        const orderTotal = (order.items || []).reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
+        
+        // Tính toán số tiền đã thanh toán hiện tại bằng cách sum tất cả bản ghi trong store payments
+        const allPayments = await paymentStore.getAll();
+        const currentPayment = allPayments
+            .filter(p => String(p.orderId) === String(orderId))
+            .reduce((sum, p) => sum + (p.amount || 0), 0);
+            
         const remainingDebt = orderTotal - currentPayment;
 
         // Kiểm tra số tiền thanh toán
         if (amount <= 0 || amount > remainingDebt) {
-            alert('Số tiền thanh toán không hợp lệ');
+            alert('Số tiền thanh toán không hợp lệ hoặc vượt quá dư nợ: ' + formatCurrency(remainingDebt));
             return false;
         }
 
@@ -2331,13 +2512,21 @@ async function processPayment(orderId, tripId, amount, method, note) {
 
         await paymentStore.add(paymentData);
 
-        // Cập nhật số tiền đã thanh toán trong đơn hàng
-        order.paymentReceived = currentPayment + amount;
-
-        // Kiểm tra nếu đã thanh toán đủ thì chuyển trạng thái thành "Thành công"
-        if (order.paymentReceived >= orderTotal) {
+        // Cập nhật trạng thái thanh toán (đồng bộ với OrderModule)
+        // Không còn lưu fixed order.paymentReceived nữa, chỉ cập nhật status nếu cần
+        const newTotalPaid = currentPayment + amount;
+        
+        if (newTotalPaid >= orderTotal) {
             order.status = 'Thành công';
+            order.paymentStatus = 'Đã thanh toán đủ';
+        } else if (newTotalPaid > 0) {
+            order.paymentStatus = 'Thanh toán một phần';
+        } else {
+            order.paymentStatus = 'Chưa thanh toán';
         }
+
+        // Xóa thuộc tính paymentReceived nếu nó tồn tại để đảm bảo không bị "fix cứng"
+        delete order.paymentReceived;
 
         await orderStore.put(order);
         await tx.done;
@@ -2350,12 +2539,15 @@ async function processPayment(orderId, tripId, amount, method, note) {
         // Refresh giao diện
         await showTripDetail(tripId);
         
-        // Cập nhật displays nếu có
+        // Cập nhật các module khác nếu có
         if (typeof displayOrders === 'function') {
             await displayOrders();
         }
         if (typeof displayReports === 'function') {
             await displayReports();
+        }
+        if (window.DebtModule && window.DebtModule.actions && typeof window.DebtModule.actions.displayCustomerDebts === 'function') {
+            await window.DebtModule.actions.displayCustomerDebts();
         }
 
         return true;
@@ -2562,8 +2754,8 @@ async function editTripExpense(expenseId, currentType, currentAmount, currentDes
                                     </select>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="edit-expense-amount" class="form-label">Số tiền (VNĐ)</label>
-                                    <input type="number" class="form-control" id="edit-expense-amount" min="0" value="${currentAmount}" required>
+                                    <label for="edit-expense-amount" class="form-label">Số tiền (K)</label>
+                                    <input type="number" class="form-control" id="edit-expense-amount" min="0" value="${currentAmount}" required step="any">
                                 </div>
                                 <div class="mb-3">
                                     <label for="edit-expense-description" class="form-label">Mô tả</label>
@@ -2909,84 +3101,261 @@ async function renderInvoiceTab(tripId) {
 async function renderCustomerInvoice(tripId, customerId) {
     const container = document.getElementById('invoice-preview');
     if (!container) return;
-    // Lấy đơn hàng của khách này trong chuyến này
-    const tx = db.transaction(['orders', 'customers'], 'readonly');
-    const orderStore = tx.objectStore('orders');
-    const customerStore = tx.objectStore('customers');
-    const orders = await orderStore.getAll();
-    const customer = await customerStore.get(customerId);
-    const customerOrders = orders.filter(o => o.deliveredTripId === tripId && o.customerId === customerId);
-    let items = [];
-    let total = 0;
-    let deliveryDate = '';
-    if (customerOrders.length > 0) {
-        // Lấy ngày giao hàng nhỏ nhất
+
+    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Đang khởi tạo hóa đơn...</p></div>';
+
+    try {
+        const orders = await window.DB.collection('orders').getAll();
+        const customer = await window.DB.collection('customers').get(customerId);
+        const allPayments = await window.DB.collection('payments').getAll();
+        const legacyDebts = await window.DB.collection('legacyDebts').getAll();
+        const generalPayments = await window.DB.collection('customerPayments').getAll();
+
+        const currentTripId = tripId;
+        const currentCustomerId = customerId;
+
+        // Lấy dữ liệu nợ cũ và công nợ tổng
+        const customerOrdersAll = orders.filter(o => o.customerId == currentCustomerId);
+        const customerLegacyDebt = legacyDebts.filter(d => d.customerId == currentCustomerId).reduce((sum, d) => sum + (d.amount || 0), 0);
+        const customerGeneralPaid = generalPayments.filter(p => p.customerId == currentCustomerId).reduce((sum, p) => sum + (p.amount || p.paymentAmount || 0), 0);
+        
+        let totalValueAllOrders = 0;
+        customerOrdersAll.forEach(o => {
+            if (o.items && Array.isArray(o.items)) {
+                totalValueAllOrders += o.items.reduce((sum, item) => sum + (item.qty * (item.sellingPrice || 0)), 0);
+            }
+        });
+
+        // Tính tổng tiền ĐÃ TRẢ dựa trên database (allPayments) thay vì fix-cứng trong order
+        const totalPaidAllOrders = allPayments
+            .filter(p => String(p.customerId) === String(currentCustomerId))
+            .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+        // Tổng nợ thực tế hiện tại (trước khi tính toán cụ thể cho chuyến này)
+        const currentTotalDebt = (totalValueAllOrders - totalPaidAllOrders) + customerLegacyDebt - customerGeneralPaid;
+
+        // Lấy đơn hàng của khách này trong chuyến này (dùng == cho an toàn)
+        const customerOrders = orders.filter(o => (String(o.deliveredTripId) === String(currentTripId) || String(o.tripId) === String(currentTripId)) && String(o.customerId) === String(currentCustomerId));
+        const tripPayments = allPayments.filter(p => p.tripId == currentTripId && p.customerId == currentCustomerId);
+
+        if (customerOrders.length === 0) {
+            container.innerHTML = `
+                <div class="alert alert-warning border-0 shadow-sm text-center">
+                    <i class="bi bi-exclamation-triangle-fill fs-1 text-warning d-block mb-3"></i>
+                    Không tìm thấy đơn hàng nào của khách <strong>${customer ? customer.name : customerId}</strong> được giao trong chuyến này.
+                    <br /> <small class="text-muted d-block mb-3">Ghi chú: Đơn phải có Chuyến hàng #${currentTripId}</small>
+                    <button class="btn btn-outline-warning btn-sm" onclick="renderCustomerInvoice(${currentTripId}, ${currentCustomerId})">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Làm mới & Thử lại
+                    </button>
+                    <div class="mt-3 p-2 bg-light rounded text-start">
+                        <small>Thông tin công nợ hiện tại: <strong>${(currentTotalDebt).toLocaleString('vi-VN')} K</strong></small>
+                    </div>
+                </div>`;
+            return;
+        }
+
+        let itemsMap = {};
+        let totalValue = 0;
+        let deliveryDate = '';
+
         const dates = customerOrders.map(o => o.orderDate).filter(Boolean).map(d => new Date(d));
         if (dates.length > 0) {
             const minDate = new Date(Math.min(...dates));
             deliveryDate = minDate.toLocaleDateString('vi-VN');
+        } else {
+            deliveryDate = new Date().toLocaleDateString('vi-VN');
         }
-    }
-    customerOrders.forEach(order => {
-        if (order.items && order.items.length > 0) {
-            order.items.forEach(item => {
-                items.push(item);
-                total += (item.qty * item.sellingPrice);
-            });
-        }
-    });
-    // Thêm button lưu ảnh hóa đơn
-    let html = `<div class="mb-3 text-end">
-        <button class="btn btn-outline-success" id="save-invoice-image-btn">
-            <i class="bi bi-image"></i> Lưu ảnh hóa đơn
-        </button>
-    </div>`;
-    // Render hóa đơn (bỏ QR code)
-    html += `<div id="invoice-bill-card" class="card shadow-sm mb-3">
-        <div class="card-header bg-success text-white">
-            <h5 class="mb-0"><i class="bi bi-receipt me-2"></i>HÓA ĐƠN BÁN HÀNG</h5>
-        </div>
-        <div class="card-body">
-            <div class="mb-2"><strong>Khách hàng:</strong> ${customer.name}</div>
-            <div class="mb-2"><strong>SĐT:</strong> ${customer.contact || ''}</div>
-            <div class="mb-2"><strong>Chuyến hàng:</strong> #${tripId}</div>
-            <div class="mb-2"><strong>Ngày giao hàng:</strong> ${deliveryDate || '-'}</div>
-            <div class="table-responsive mb-3">
-                <table class="table table-bordered">
-                    <thead><tr><th>Sản phẩm</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
-                    <tbody>
-                        ${items.map(i => `<tr><td>${i.productName}</td><td>${i.qty}</td><td>${i.sellingPrice.toLocaleString('vi-VN')}</td><td>${(i.qty*i.sellingPrice).toLocaleString('vi-VN')}</td></tr>`).join('')}
-                    </tbody>
-                </table>
-            </div>
-            <div class="d-flex justify-content-between align-items-center">
-                <div><strong>Tổng tiền:</strong> <span class="text-danger fs-5 fw-bold">${total.toLocaleString('vi-VN')} VNĐ</span></div>
-            </div>
-        </div>
-    </div>`;
-    container.innerHTML = html;
-    // Sự kiện lưu ảnh hóa đơn
-    const saveBtn = document.getElementById('save-invoice-image-btn');
-    if (saveBtn) {
-        saveBtn.onclick = async function() {
-            const billCard = document.getElementById('invoice-bill-card');
-            if (!billCard) return;
-            saveBtn.disabled = true;
-            saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang tạo ảnh...';
-            try {
-                const canvas = await html2canvas(billCard, { scale: 2 });
-                const link = document.createElement('a');
-                link.download = `HoaDon_KH${customer.name.replace(/\s+/g, '_')}_DH${tripId}.png`;
-                link.href = canvas.toDataURL('image/png');
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            } catch (e) {
-                alert('Không thể lưu ảnh. Vui lòng thử lại!');
+
+        customerOrders.forEach(order => {
+            if (order.items && Array.isArray(order.items)) {
+                order.items.forEach(item => {
+                    const key = `${item.productName}_${item.sellingPrice}`;
+                    if (!itemsMap[key]) {
+                        itemsMap[key] = {
+                            productName: item.productName,
+                            qty: 0,
+                            sellingPrice: item.sellingPrice || 0,
+                            unit: item.unit || 'Cái'
+                        };
+                    }
+                    itemsMap[key].qty += (item.qty || 0);
+                    totalValue += ((item.qty || 0) * (item.sellingPrice || 0));
+                });
             }
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = '<i class="bi bi-image"></i> Lưu ảnh hóa đơn';
-        };
+        });
+
+        const items = Object.values(itemsMap);
+        const totalPaidInTrip = tripPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+        const balance = totalValue - totalPaidInTrip;
+
+        let html = `
+            <div class="mb-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 text-muted"><i class="bi bi-info-circle me-1"></i>Xem trước hóa đơn</h6>
+                <button class="btn btn-primary" id="save-invoice-image-btn">
+                    <i class="bi bi-image me-1"></i> Lưu ảnh & Gửi khách
+                </button>
+            </div>
+            <div id="invoice-bill-card" class="card shadow-none border-0" style="width: 100%; max-width: 500px; margin: 0 auto; background: #fff; color: #333; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                <div class="card-body p-4 border" style="border: 2px solid #333 !important;">
+                    <div class="text-center mb-4">
+                        <div style="font-size: 2.5rem; margin-bottom: 5px;">🏺</div>
+                        <h3 style="margin: 0; font-weight: 800; color: #000; letter-spacing: 1px; font-family: 'Times New Roman', serif;">GỐM SỨ NGUYỄN NGỌC</h3>
+                        <p style="margin: 5px 0 0; font-size: 0.9rem; color: #555;">Thôn 4 Phụng Công Hưng Yên</p>
+                        <p style="margin: 2px 0 0; font-size: 0.9rem; color: #555;">Hotline: 0962845960 | Zalo: 0775297777</p>
+                        <div style="height: 1px; background: #333; margin: 15px auto; width: 80%;"></div>
+                        <h4 style="margin: 10px 0; font-weight: 700; letter-spacing: 2px;">HÓA ĐƠN BÁN HÀNG</h4>
+                        <p style="font-size: 0.85rem; color: #666;">Chuyến: #${currentTripId} - Ngày: ${deliveryDate}</p>
+                    </div>
+
+                    <div class="mb-4" style="font-size: 0.95rem; border-bottom: 1px dashed #ccc; padding-bottom: 15px;">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span>Khách hàng:</span>
+                            <strong style="text-transform: uppercase;">${customer ? customer.name : 'Khách vãng lai'}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span>Số điện thoại:</span>
+                            <span>${customer ? (customer.contact || '-') : '-'}</span>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm table-borderless" style="font-size: 0.9rem;">
+                            <thead style="border-bottom: 2px solid #333;">
+                                <tr>
+                                    <th style="padding: 8px 0;">Sản phẩm</th>
+                                    <th class="text-center" style="padding: 8px 0;">SL</th>
+                                    <th class="text-end" style="padding: 8px 0;">Đơn giá</th>
+                                    <th class="text-end" style="padding: 8px 0;">T.Tiền</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(i => `
+                                    <tr style="border-bottom: 1px solid #eee;">
+                                        <td style="padding: 10px 0; max-width: 150px;">${i.productName}</td>
+                                        <td class="text-center" style="padding: 10px 0;">${i.qty}</td>
+                                        <td class="text-end" style="padding: 10px 0;">${i.sellingPrice.toLocaleString('vi-VN')}</td>
+                                        <td class="text-end" style="padding: 10px 0; font-weight: 600;">${(i.qty * i.sellingPrice).toLocaleString('vi-VN')}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="border-top pt-3" style="font-size: 1rem;">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span style="font-weight: 600;">TỔNG CỘNG:</span>
+                            <span style="font-weight: 800; font-size: 1.1rem; color: #000;">${totalValue.toLocaleString('vi-VN')} K</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2 text-success">
+                            <span>Đã thanh toán:</span>
+                            <span>-${totalPaidInTrip.toLocaleString('vi-VN')} K</span>
+                        </div>
+                        <div class="d-flex justify-content-between pt-2 border-top" style="font-weight: 800; color: #d63031;">
+                            <span>CÒN LẠI:</span>
+                            <span>${balance.toLocaleString('vi-VN')} K</span>
+                        </div>
+
+                        ${(currentTotalDebt - balance) > 0 ? `
+                        <div class="d-flex justify-content-between mt-2 pt-2 border-top" style="font-size: 0.95rem; border-top-style: dashed !important;">
+                            <span class="text-muted">Nợ cũ:</span>
+                            <span class="text-muted">+${(currentTotalDebt - balance).toLocaleString('vi-VN')} K</span>
+                        </div>
+                        <div class="d-flex justify-content-between mt-1 pt-2 border-top" style="font-weight: 800; border-top: 2px solid #333 !important; font-size: 1.15rem; color: #000;">
+                            <span>TỔNG NỢ:</span>
+                            <span>${currentTotalDebt.toLocaleString('vi-VN')} K</span>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="text-center mt-5">
+                        <p style="font-style: italic; margin-bottom: 10px; font-size: 0.85rem;">Cảm ơn quý khách đã tin tưởng Gốm Sứ Nguyễn Ngọc!</p>
+                        <div style="font-size: 0.75rem; color: #999;">Ghi chú: Vui lòng kiểm tra hàng khi nhận.</div>
+                    </div>
+                </div>
+            </div>`;
+
+        container.innerHTML = html;
+
+        const saveBtn = document.getElementById('save-invoice-image-btn');
+        if (saveBtn) {
+            saveBtn.onclick = async function() {
+                const billCard = document.getElementById('invoice-bill-card');
+                if (!billCard) return;
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang tạo ảnh...';
+                try {
+                    const canvas = await html2canvas(billCard, { 
+                        scale: 2,
+                        backgroundColor: '#ffffff',
+                        logging: false,
+                        onclone: function(clonedDoc) {
+                            // Xoá các stylesheet gắn ngoài (bootstrap 5.3+) trong bản clone để tránh lỗi parse màu 'oklch'
+                            const links = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
+                            links.forEach(link => link.remove());
+                            // Thêm style tiện ích tuỳ chỉnh thay cho bootstrap bị xóa để giữ nguyên layout
+                            const fallbackStyle = clonedDoc.createElement('style');
+                            fallbackStyle.innerHTML = `
+                                .text-center { text-align: center !important; }
+                                .text-end { text-align: right !important; }
+                                .text-success { color: #198754 !important; }
+                                .text-muted { color: #6c757d !important; }
+                                .d-flex { display: flex !important; }
+                                .justify-content-between { justify-content: space-between !important; }
+                                .align-items-center { align-items: center !important; }
+                                .p-4 { padding: 1.5rem !important; }
+                                .p-2 { padding: 0.5rem !important; }
+                                .mb-1 { margin-bottom: 0.25rem !important; }
+                                .mb-2 { margin-bottom: 0.5rem !important; }
+                                .mb-3 { margin-bottom: 1rem !important; }
+                                .mb-4 { margin-bottom: 1.5rem !important; }
+                                .mt-1 { margin-top: 0.25rem !important; }
+                                .mt-2 { margin-top: 0.5rem !important; }
+                                .mt-3 { margin-top: 1rem !important; }
+                                .mt-5 { margin-top: 3rem !important; }
+                                .pt-2 { padding-top: 0.5rem !important; }
+                                .pt-3 { padding-top: 1rem !important; }
+                                .pb-2 { padding-bottom: 0.5rem !important; }
+                                .border-top { border-top: 1px solid #dee2e6 !important; }
+                                .border-0 { border: 0 !important; }
+                                .table { width: 100%; margin-bottom: 1rem; border-collapse: collapse; }
+                                .table th, .table td { vertical-align: middle; }
+                                .table-responsive { display: block; width: 100%; overflow-x: auto; }
+                            `;
+                            clonedDoc.head.appendChild(fallbackStyle);
+                            
+                            const styles = clonedDoc.querySelectorAll('style');
+                            styles.forEach(style => {
+                                if (style !== fallbackStyle && style.innerHTML.includes('oklch')) {
+                                    style.remove();
+                                }
+                            });
+                            // Ẩn thanh cuộn ngoài thẻ bill
+                            const body = clonedDoc.querySelector('body');
+                            if(body) {
+                                body.style.margin = '0';
+                                body.style.padding = '0';
+                            }
+                        }
+                    });
+                    const link = document.createElement('a');
+                    link.download = `HoaDon_KH${customer ? customer.name.replace(/\s+/g, '_') : 'KH'}_Trip${currentTripId}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } catch (e) {
+                    console.error('Lỗi html2canvas:', e);
+                    // Hiển thị thông báo thân thiện hơn
+                    alert('Hệ thống trình duyệt hiện tại không hỗ trợ chụp ảnh tự động. Vui lòng sử dụng tính năng chụp ảnh màn hình của điện thoại/máy tính.');
+                }
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="bi bi-image me-1"></i> Lưu ảnh & Gửi khách';
+            };
+        }
+    } catch (error) {
+        console.error('Lỗi khi render hóa đơn:', error);
+        container.innerHTML = `<div class="alert alert-danger">Lỗi khi khởi tạo hóa đơn: ${error.message}</div>`;
     }
 }
+
 

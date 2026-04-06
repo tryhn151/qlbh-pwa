@@ -29,63 +29,45 @@ async function updatePaymentFormWithDebtInfo(customerId) {
             return;
         }
 
-        // Lấy đơn hàng của khách hàng
-        const orderTx = db.transaction('orders', 'readonly');
-        const orderStore = orderTx.objectStore('orders');
-        const orders = await orderStore.getAll();
-        const customerOrders = orders.filter(order => order.customerId === customerId);
-
-        // Lấy thanh toán của khách hàng
-        const paymentTx = db.transaction('customerPayments', 'readonly');
-        const paymentStore = paymentTx.objectStore('customerPayments');
-        const paymentIndex = paymentStore.index('customerId');
-        const customerPayments = await paymentIndex.getAll(customerId);
-
-        // Tính tổng giá trị đơn hàng và tổng thanh toán
-        let totalOrderValue = 0;
-        let unpaidOrderCount = 0;
-
-        for (const order of customerOrders) {
-            // Tính giá trị đơn hàng
-            if (order.items && Array.isArray(order.items)) {
-                const orderValue = order.items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0);
-
-                // Kiểm tra trạng thái thanh toán
-                if (!order.paymentStatus || order.paymentStatus !== 'Đã thanh toán đủ') {
-                    totalOrderValue += orderValue;
-                    unpaidOrderCount++;
-                }
-            }
+        // Lấy tất cả thông tin để tính công nợ đồng nhất với DebtModule
+        let allDebtData = [];
+        if (window.DebtModule && typeof window.DebtModule.actions.calculateAllCustomerDebts === 'function') {
+            allDebtData = await window.DebtModule.actions.calculateAllCustomerDebts();
         }
-
-        // Tính tổng thanh toán
-        const totalPayment = customerPayments.reduce((sum, payment) => sum + payment.amount, 0);
-
-        // Tính công nợ còn lại
-        const remainingDebt = totalOrderValue - totalPayment;
+        
+        const customerDebt = allDebtData.find(d => String(d.customerId) === String(customerId));
+        
+        const remainingDebt = customerDebt ? customerDebt.totalDebtAll : 0;
+        const totalPayment = customerDebt ? customerDebt.totalPaymentReceived : 0;
+        const unpaidOrderCount = customerDebt ? customerDebt.unpaidOrderCount : 0;
+        const legacyDebt = customerDebt ? customerDebt.legacyDebt : 0;
 
         // Hiển thị thông tin công nợ
         if (remainingDebt > 0) {
             debtInfoContainer.innerHTML = `
                 <h6 class="mb-3">Thông tin công nợ - ${customer.name}</h6>
                 <div class="row">
-                    <div class="col-md-4">
-                        <p class="mb-1"><strong>Tổng nợ:</strong></p>
-                        <p class="text-danger fs-5">${formatCurrency(remainingDebt)}</p>
+                    <div class="col-md-3">
+                        <p class="mb-1 text-muted small">TỔNG DƯ NỢ</p>
+                        <p class="text-danger fw-bold fs-5 mb-0">${formatCurrency(remainingDebt)}</p>
                     </div>
-                    <div class="col-md-4">
-                        <p class="mb-1"><strong>Đã thanh toán:</strong></p>
-                        <p class="text-success">${formatCurrency(totalPayment)}</p>
+                    <div class="col-md-3">
+                        <p class="mb-1 text-muted small">ĐÃ THANH TOÁN</p>
+                        <p class="text-success fw-bold mb-0">${formatCurrency(totalPayment)}</p>
                     </div>
-                    <div class="col-md-4">
-                        <p class="mb-1"><strong>Đơn chưa thanh toán:</strong></p>
-                        <p>${unpaidOrderCount}</p>
+                    <div class="col-md-3">
+                        <p class="mb-1 text-muted small">NỢ CŨ (NẾU CÓ)</p>
+                        <p class="fw-bold mb-0">${formatCurrency(legacyDebt)}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <p class="mb-1 text-muted small">ĐƠN CHƯA TRẢ</p>
+                        <p class="fw-bold mb-0">${unpaidOrderCount} đơn</p>
                     </div>
                 </div>
-                <div class="form-check mt-2">
+                <div class="form-check mt-3 pt-2 border-top">
                     <input class="form-check-input" type="checkbox" id="auto-fill-debt-amount" checked>
                     <label class="form-check-label" for="auto-fill-debt-amount">
-                        Điền số tiền nợ vào ô thanh toán
+                        Tự động điền số tiền nợ vào ô thanh toán
                     </label>
                 </div>
             `;
@@ -142,8 +124,14 @@ async function addCustomerPayment(paymentData) {
 
         console.log('Đã thêm thanh toán mới với ID:', id);
 
-        // Cập nhật giao diện
+        // Cập nhật giao diện thanh toán
         await displayPayments();
+
+        // Cập nhật giao diện công nợ (Đồng bộ quan trọng)
+        if (window.DebtModule && window.DebtModule.actions && typeof window.DebtModule.actions.displayCustomerDebts === 'function') {
+            console.log('🔄 Đồng bộ: Đang cập nhật lại công nợ sau khi thêm thanh toán...');
+            await window.DebtModule.actions.displayCustomerDebts();
+        }
 
         return id;
     } catch (error) {
@@ -225,8 +213,14 @@ async function deleteCustomerPayment(paymentId) {
 
         console.log('Đã xóa thanh toán với ID:', paymentId);
 
-        // Cập nhật giao diện
+        // Cập nhật giao diện thanh toán
         await displayPayments();
+
+        // Cập nhật giao diện công nợ (Đồng bộ quan trọng)
+        if (window.DebtModule && window.DebtModule.actions && typeof window.DebtModule.actions.displayCustomerDebts === 'function') {
+            console.log('🔄 Đồng bộ: Đang cập nhật lại công nợ sau khi xóa thanh toán...');
+            await window.DebtModule.actions.displayCustomerDebts();
+        }
 
         return true;
     } catch (error) {

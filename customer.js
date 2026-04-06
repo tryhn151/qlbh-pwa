@@ -45,16 +45,9 @@ const CustomerModule = {
             return value;
         },
 
-        // Wait for database (Firestore - always ready after auth)
+        // Wait for database (Firestore shim - always ready after auth)
         async waitForDB() {
-            return window.DB ? true : null;
-        }, 100);
-        
-        setTimeout(() => {
-            clearInterval(checkInterval);
-                    resolve(null);
-                }, 15000);
-            });
+            return window.db || null;
         },
 
         // Clean up modals
@@ -149,7 +142,7 @@ const CustomerModule = {
             const trimmedName = name.trim().toLowerCase();
             return CustomerModule.data.currentCustomers.some(customer => 
                 customer.name.toLowerCase() === trimmedName && 
-                customer.id !== excludeId
+                customer.id != excludeId
             );
         },
 
@@ -305,11 +298,11 @@ const CustomerModule = {
                     </td>
                     <td class="text-center">
                         <div class="btn-group" role="group">
-                            <button class="btn btn-sm btn-outline-primary" onclick="CustomerModule.actions.edit(${customer.id})" 
+                            <button class="btn btn-sm btn-outline-primary" onclick="CustomerModule.actions.edit('${customer.id}')" 
                                     title="Chỉnh sửa khách hàng">
                                 <i class="bi bi-pencil"></i>
                             </button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="CustomerModule.actions.confirmDelete(${customer.id})"
+                            <button class="btn btn-sm btn-outline-danger" onclick="CustomerModule.actions.confirmDelete('${customer.id}')"
                                     title="Xóa khách hàng">
                                 <i class="bi bi-trash"></i>
                             </button>
@@ -348,11 +341,11 @@ const CustomerModule = {
                             </div>
                         </div>
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <button class="btn btn-outline-primary btn-sm" onclick="CustomerModule.actions.edit(${customer.id})" 
+                            <button class="btn btn-outline-primary btn-sm" onclick="CustomerModule.actions.edit('${customer.id}')" 
                                     title="Chỉnh sửa khách hàng">
                                 <i class="bi bi-pencil me-1"></i>Sửa
                             </button>
-                            <button class="btn btn-outline-danger btn-sm" onclick="CustomerModule.actions.confirmDelete(${customer.id})"
+                            <button class="btn btn-outline-danger btn-sm" onclick="CustomerModule.actions.confirmDelete('${customer.id}')"
                                     title="Xóa khách hàng">
                                 <i class="bi bi-trash me-1"></i>Xóa
                             </button>
@@ -702,7 +695,7 @@ const CustomerModule = {
         // Update customer
         async update() {
             const form = document.getElementById('customer-form');
-            const editId = parseInt(form.getAttribute('data-edit-id'));
+            const editId = form.getAttribute('data-edit-id');
             
             const formData = {
                 name: document.getElementById('customer-name').value.trim(),
@@ -740,48 +733,128 @@ const CustomerModule = {
 
         // Confirm delete
         confirmDelete(customerId) {
-            const customer = CustomerModule.data.currentCustomers.find(c => c.id === customerId);
-            if (!customer) return;
+            console.log('🗑️ Confirming delete for customer ID:', customerId);
+            
+            if (!customerId) {
+                console.error('❌ No customer ID provided for deletion');
+                return;
+            }
 
-            CustomerModule.data.customerToDelete = customer;
+            const customer = CustomerModule.data.currentCustomers.find(c => String(c.id) === String(customerId));
+            
+            if (!customer) {
+                console.error('❌ Customer not found for ID:', customerId);
+                // Try searching with loose equality as fallback
+                const fallback = CustomerModule.data.currentCustomers.find(c => c.id == customerId);
+                if (fallback) {
+                    console.log('✅ Found customer using fallback loose equality');
+                    CustomerModule.data.customerToDelete = fallback;
+                } else {
+                    CustomerModule.ui.showErrors(['Không tìm thấy thông tin khách hàng để xóa!']);
+                    return;
+                }
+            } else {
+                CustomerModule.data.customerToDelete = customer;
+            }
+
+            const activeCustomer = CustomerModule.data.customerToDelete;
+            console.log('👤 Customer to delete:', activeCustomer.name);
 
             // Update delete modal content
             const nameElement = document.getElementById('delete-customer-name');
             const detailsElement = document.getElementById('delete-customer-details');
 
-            if (nameElement) nameElement.textContent = customer.name;
+            if (nameElement) nameElement.textContent = activeCustomer.name;
             if (detailsElement) {
-                detailsElement.textContent = customer.contact || 'Chưa có số điện thoại';
+                detailsElement.textContent = activeCustomer.contact || 'Chưa có số điện thoại';
             }
 
-            // Show delete modal
-            const deleteModal = new bootstrap.Modal(document.getElementById('deleteCustomerModal'));
-            deleteModal.show();
+            // Show delete modal safely
+            const modalEl = document.getElementById('deleteCustomerModal');
+            if (modalEl) {
+                const deleteModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                deleteModal.show();
+                console.log('✅ Delete modal shown');
+            } else {
+                console.error('❌ Delete customer modal not found in DOM');
+            }
         },
 
         // Delete customer
         async delete() {
             const customer = CustomerModule.data.customerToDelete;
-            if (!customer) return;
+            console.log('🔥 Executing delete for:', customer ? customer.name : 'NULL');
+            
+            if (!customer) {
+                console.error('❌ No customer selected for deletion');
+                return;
+            }
 
             try {
                 const success = await CustomerModule.database.delete(customer.id);
                 if (success) {
-                    // Close modal
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('deleteCustomerModal'));
-                    if (modal) {
-                        modal.hide();
+                    console.log('✅ Database delete successful');
+                    
+                    // Close modal safely
+                    const modalEl = document.getElementById('deleteCustomerModal');
+                    if (modalEl) {
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) {
+                            modal.hide();
+                        }
                     }
 
+                    // Force clean up any remaining backdrop
+                    CustomerModule.utils.cleanupAllModals();
+
+                    // Cleanup related data (legacy debts, payments)
+                    await CustomerModule.actions.cleanupCustomerData(customer.id);
+
                     // Reload and refresh
-                    await CustomerModule.database.loadAll();
                     await CustomerModule.refresh();
+
+                    // Cập nhật công nợ nếu module có sẵn
+                    if (window.DebtModule && window.DebtModule.actions && typeof window.DebtModule.actions.displayCustomerDebts === 'function') {
+                        await window.DebtModule.actions.displayCustomerDebts();
+                    }
+
                     CustomerModule.ui.showSuccess('Xóa khách hàng thành công!');
                 }
             } catch (error) {
+                console.error('❌ Error executing delete:', error);
                 CustomerModule.ui.showErrors([`Có lỗi xảy ra khi xóa: ${error.message}`]);
             } finally {
                 CustomerModule.data.customerToDelete = null;
+            }
+        },
+
+        // Cleanup related data when customer is deleted
+        async cleanupCustomerData(customerId) {
+            console.log('🧹 Cleaning up related data for customer ID:', customerId);
+            try {
+                // Delete legacy debts
+                const legacyTx = db.transaction('legacyDebts', 'readwrite');
+                const legacyStore = legacyTx.objectStore('legacyDebts');
+                const legacyIndex = legacyStore.index('customerId');
+                const legacyEntries = await legacyIndex.getAll(customerId);
+                for (const entry of legacyEntries) {
+                    await legacyStore.delete(entry.id);
+                }
+                await legacyTx.done;
+
+                // Delete customer payments (general payments)
+                const paymentTx = db.transaction('customerPayments', 'readwrite');
+                const paymentStore = paymentTx.objectStore('customerPayments');
+                const paymentIndex = paymentStore.index('customerId');
+                const payments = await paymentIndex.getAll(customerId);
+                for (const p of payments) {
+                    await paymentStore.delete(p.id);
+                }
+                await paymentTx.done;
+                
+                console.log('✅ Successfully cleaned up legacy debts and payments for customer');
+            } catch (error) {
+                console.error('❌ Error during cleanupCustomerData:', error);
             }
         },
 

@@ -40,6 +40,30 @@ const ALLOWED_EMAILS = [
 
 - Tất cả user được phép **chia sẻ cùng một database** (phù hợp dùng nội bộ)
 
+## 📖 Hướng dẫn sử dụng tính năng mới
+
+### 👷 Quản lý nhân viên
+1. Vào tab **Nhân viên**.
+2. Nhấn **Thêm nhân viên** để tạo mới (chọn vai trò: Lái xe, Phụ xe hoặc Bốc hàng).
+3. Thiết lập **Lương/chuyến mặc định** để hệ thống tự gợi ý khi tạo chuyến hàng.
+
+### 🚛 Gán nhân viên vào chuyến hàng
+1. Khi tạo hoặc chỉnh sửa một **Chuyến hàng**, cuộn xuống phần **Nhân viên tham gia**.
+2. Chọn các nhân viên tham gia chuyến đó.
+3. Chỉnh sửa số tiền trả cho mỗi nhân viên trong chuyến đó nếu cần (mặc định lấy từ thiết lập nhân viên).
+4. Lưu chuyến hàng. Số tiền này sẽ được tính vào **Chi phí chuyến hàng**.
+
+### 💰 Xem bảng lương & Ngày công
+1. Vào tab **Nhân viên** > Chuyển sang sub-tab **Bảng lương & Ngày công**.
+2. Chọn **Chế độ xem** (Tháng hoặc Năm) và thời gian tương ứng.
+3. Hệ thống sẽ thống kê tổng số chuyến đi và tổng lương của từng nhân viên.
+4. Nhấn **Chi tiết** để xem danh sách các chuyến hàng nhân viên đã tham gia.
+
+### 📊 Báo cáo lợi nhuận chi tiết
+1. Vào tab **Báo cáo**.
+2. Các báo cáo (Chuyến hàng, Tháng, Năm) hiện đã có thêm cột **Lương NV**.
+3. Lợi nhuận gộp sẽ được tính bằng: `Doanh thu - (Tiền hàng + Phí phát sinh + Lương NV)`.
+
 ## 🚀 Deploy
 
 ```powershell
@@ -81,6 +105,7 @@ qlbh-pwa/
 ├── customer.js             # Module khách hàng
 ├── supplier.js             # Module nhà cung cấp
 ├── product.js              # Module sản phẩm
+├── employee.js             # Module nhân viên (MỚI)
 ├── order.js                # Module đơn hàng
 ├── trip.js                 # Module chuyến hàng
 ├── payment.js              # Module thanh toán

@@ -22,12 +22,6 @@ const ProductModule = {
                 pattern: /^[a-zA-ZàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ\s0-9\-\.()\/&]+$/,
                 message: 'Tên sản phẩm phải từ 2-100 ký tự, chỉ chứa chữ cái, số và một số ký tự đặc biệt'
             },
-            code: {
-                required: false,
-                maxLength: 50,
-                pattern: /^[a-zA-Z0-9\-_\.]+$/,
-                message: 'Mã sản phẩm không được quá 50 ký tự và chỉ chứa chữ cái, số, dấu gạch ngang, gạch dưới và dấu chấm'
-            },
             unit: {
                 required: false,
                 maxLength: 30,
@@ -42,7 +36,6 @@ const ProductModule = {
         },
         fieldDisplayNames: {
             name: 'Tên sản phẩm',
-            code: 'Mã sản phẩm',
             unit: 'Đơn vị tính',
             purchasePrice: 'Giá nhập',
             supplierId: 'Nhà cung cấp'
@@ -64,54 +57,42 @@ const ProductModule = {
 
         // Format currency
         formatCurrency(amount) {
-            if (!amount || amount === 0) return '0 VNĐ';
+            if (typeof window.formatCurrency === 'function') return window.formatCurrency(amount);
+            if (!amount && amount !== 0) return '0 K';
             return new Intl.NumberFormat('vi-VN', {
-                style: 'currency',
-                currency: 'VND'
-            }).format(amount);
+                style: 'decimal',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            }).format(amount) + ' K';
+        },
+
+        // Get color based on unit
+        getUnitColor(unit) {
+            if (!unit) return '#6c757d'; // Muted gray
+            const units = {
+                'bao': '#198754',   // green
+                'kg': '#0d6efd',    // blue
+                'thùng': '#fd7e14', // orange
+                'chai': '#dc3545',  // red
+                'cái': '#6f42c1',   // purple
+                'hộp': '#0dcaf0',   // cyan
+                'lít': '#20c997'    // teal
+            };
+            const key = unit.toLowerCase().trim();
+            if (units[key]) return units[key];
+            
+            // Hash for stable color if not defined
+            let hash = 0;
+            for (let i = 0; i < key.length; i++) {
+                hash = key.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+            return '#' + '00000'.substring(0, 6 - c.length) + c;
         },
 
         // Wait for database
         async waitForDB() {
-    return new Promise((resolve) => {
-        if (window.db) {
-            try {
-                const tx = window.db.transaction('products', 'readonly');
-                tx.abort();
-                resolve(window.db);
-                return;
-            } catch (error) {
-                        // Continue waiting
-            }
-        }
-        
-        let attempts = 0;
-        const maxAttempts = 150;
-        
-        const checkInterval = setInterval(() => {
-            attempts++;
-            
-            if (window.db) {
-                try {
-                    const tx = window.db.transaction('products', 'readonly');
-                    tx.abort();
-                    
-                    clearInterval(checkInterval);
-                    resolve(window.db);
-                } catch (error) {
-                            // Continue waiting
-                }
-            } else if (attempts >= maxAttempts) {
-                clearInterval(checkInterval);
-                resolve(null);
-            }
-        }, 100);
-        
-        setTimeout(() => {
-            clearInterval(checkInterval);
-            resolve(null);
-        }, 15000);
-    });
+            return window.db || null;
         },
 
         // Clean up modals
@@ -212,7 +193,7 @@ const ProductModule = {
             const trimmedName = name.trim().toLowerCase();
             return ProductModule.data.currentProducts.some(product => 
                 product.name.toLowerCase() === trimmedName && 
-                product.id !== excludeId
+                product.id != excludeId
             );
         },
 
@@ -261,7 +242,6 @@ const ProductModule = {
                 // Normalize data
                 const normalizedData = {
                     name: productData.name.trim(),
-                    code: productData.code ? productData.code.trim() : '',
                     unit: productData.unit ? productData.unit.trim() : '',
                     purchasePrice: parseFloat(productData.purchasePrice) || 0,
                     supplierId: parseInt(productData.supplierId) || null,
@@ -308,7 +288,6 @@ const ProductModule = {
                 // Normalize and update data
                 const normalizedData = {
                     name: productData.name.trim(),
-                    code: productData.code ? productData.code.trim() : '',
                     unit: productData.unit ? productData.unit.trim() : '',
                     purchasePrice: parseFloat(productData.purchasePrice) || 0,
                     supplierId: parseInt(productData.supplierId) || null,
@@ -459,7 +438,7 @@ const ProductModule = {
         // Get supplier name by ID
         getSupplierName(supplierId) {
             if (!supplierId) return 'Chưa có';
-            const supplier = ProductModule.data.currentSuppliers.find(s => s.id === supplierId);
+            const supplier = ProductModule.data.currentSuppliers.find(s => s.id == supplierId);
             return supplier ? supplier.name : 'Không xác định';
         },
 
@@ -477,7 +456,6 @@ const ProductModule = {
                         <tr class="align-middle table-primary">
                             <th class="text-center" scope="col" style="width: 80px;"><i class="bi bi-hash"></i></th>
                             <th scope="col"><i class="bi bi-box-seam me-2"></i>Tên sản phẩm</th>
-                            <th class="text-center" scope="col" style="width: 120px;"><i class="bi bi-upc me-2"></i>Mã SP</th>
                             <th class="text-center" scope="col" style="width: 100px;"><i class="bi bi-rulers me-2"></i>Đơn vị</th>
                             <th class="text-end" scope="col" style="width: 140px;"><i class="bi bi-currency-dollar me-2"></i>Giá nhập</th>
                             <th scope="col" style="width: 180px;"><i class="bi bi-building me-2"></i>Nhà cung cấp</th>
@@ -490,17 +468,16 @@ const ProductModule = {
             tableBody.innerHTML = '';
 
             ProductModule.data.filteredProducts.forEach(product => {
+                const unitColor = ProductModule.utils.getUnitColor(product.unit);
                 const row = document.createElement('tr');
+                row.style.borderLeft = `4px solid ${unitColor}`;
                 row.innerHTML = `
                     <td class="text-center fw-bold">${product.id}</td>
                     <td class="text-start">
                         <div class="fw-bold text-primary">${ProductModule.utils.safeValue(product.name)}</div>
                     </td>
                     <td class="text-center">
-                        <code class="bg-light px-2 py-1 rounded">${ProductModule.utils.safeValue(product.code, '--')}</code>
-                    </td>
-                    <td class="text-center">
-                        <span class="badge bg-info">${ProductModule.utils.safeValue(product.unit, '--')}</span>
+                        <span class="badge" style="background-color: ${unitColor}">${ProductModule.utils.safeValue(product.unit, '--')}</span>
                     </td>
                     <td class="text-end">
                         <span class="fw-bold text-success">${ProductModule.utils.formatCurrency(product.purchasePrice)}</span>
@@ -513,11 +490,11 @@ const ProductModule = {
                     </td>
                     <td class="text-center">
                         <div class="btn-group" role="group">
-                            <button class="btn btn-sm btn-outline-primary" onclick="ProductModule.actions.edit(${product.id})" 
+                            <button class="btn btn-sm btn-outline-primary" onclick="ProductModule.actions.edit('${product.id}')" 
                                     title="Chỉnh sửa sản phẩm">
                                 <i class="bi bi-pencil"></i>
                         </button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="ProductModule.actions.confirmDelete(${product.id})"
+                            <button class="btn btn-sm btn-outline-danger" onclick="ProductModule.actions.confirmDelete('${product.id}')"
                                     title="Xóa sản phẩm">
                                 <i class="bi bi-trash"></i>
                         </button>
@@ -536,8 +513,10 @@ const ProductModule = {
             mobileContainer.innerHTML = '';
 
             ProductModule.data.filteredProducts.forEach(product => {
+                const unitColor = ProductModule.utils.getUnitColor(product.unit);
                 const card = document.createElement('div');
                 card.className = 'card mb-3 border-0 shadow-sm';
+                card.style.borderLeft = `5px solid ${unitColor}`;
                 card.innerHTML = `
                     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                         <div class="fw-bold">
@@ -549,16 +528,9 @@ const ProductModule = {
                         <div class="row g-2 mb-3">
                             <div class="col-6">
                                 <div class="d-flex align-items-center">
-                                    <i class="bi bi-upc text-secondary me-2"></i>
-                                    <span class="text-muted">Mã:</span>
-                                    <code class="ms-2 bg-light px-1 rounded">${ProductModule.utils.safeValue(product.code, '--')}</code>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="d-flex align-items-center">
                                     <i class="bi bi-rulers text-info me-2"></i>
                                     <span class="text-muted">Đơn vị:</span>
-                                    <span class="ms-2 badge bg-info">${ProductModule.utils.safeValue(product.unit, '--')}</span>
+                                    <span class="ms-2 badge" style="background-color: ${unitColor}">${ProductModule.utils.safeValue(product.unit, '--')}</span>
                                 </div>
                             </div>
                             <div class="col-12">
@@ -577,11 +549,11 @@ const ProductModule = {
                             </div>
                         </div>
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <button class="btn btn-outline-primary btn-sm" onclick="ProductModule.actions.edit(${product.id})" 
+                            <button class="btn btn-outline-primary btn-sm" onclick="ProductModule.actions.edit('${product.id}')" 
                                     title="Chỉnh sửa sản phẩm">
                                 <i class="bi bi-pencil me-1"></i>Sửa
                             </button>
-                            <button class="btn btn-outline-danger btn-sm" onclick="ProductModule.actions.confirmDelete(${product.id})"
+                            <button class="btn btn-outline-danger btn-sm" onclick="ProductModule.actions.confirmDelete('${product.id}')"
                                     title="Xóa sản phẩm">
                                 <i class="bi bi-trash me-1"></i>Xóa
                             </button>
@@ -737,7 +709,6 @@ const ProductModule = {
                 form.setAttribute('data-edit-id', product.id);
             
             document.getElementById('product-name').value = product.name || '';
-            document.getElementById('product-code').value = product.code || '';
             document.getElementById('product-unit').value = product.unit || '';
             document.getElementById('product-purchase-price').value = product.purchasePrice || '';
             
@@ -760,7 +731,7 @@ const ProductModule = {
 
         // Clear validation errors
         clearValidationErrors() {
-            const fields = ['product-name', 'product-code', 'product-unit', 'product-purchase-price', 'product-supplier'];
+            const fields = ['product-name', 'product-unit', 'product-purchase-price', 'product-supplier'];
             fields.forEach(fieldId => {
                 const field = document.getElementById(fieldId);
                 if (field) {
@@ -809,7 +780,7 @@ const ProductModule = {
 
         // Setup real-time validation
         setupRealTimeValidation() {
-            const fields = ['product-name', 'product-code', 'product-unit', 'product-purchase-price'];
+            const fields = ['product-name', 'product-unit', 'product-purchase-price'];
             
             fields.forEach(fieldId => {
                 const field = document.getElementById(fieldId);
@@ -898,7 +869,6 @@ const ProductModule = {
             const form = document.getElementById('product-form');
             const formData = {
                 name: document.getElementById('product-name').value.trim(),
-                code: document.getElementById('product-code').value.trim(),
                 unit: document.getElementById('product-unit').value.trim(),
                 purchasePrice: document.getElementById('product-purchase-price').value,
                 supplierId: document.getElementById('product-supplier').value
@@ -973,11 +943,10 @@ const ProductModule = {
         // Update product
         async update() {
             const form = document.getElementById('product-form');
-            const editId = parseInt(form.getAttribute('data-edit-id'));
+            const editId = form.getAttribute('data-edit-id');
             
             const formData = {
                 name: document.getElementById('product-name').value.trim(),
-                code: document.getElementById('product-code').value.trim(),
                 unit: document.getElementById('product-unit').value.trim(),
                 purchasePrice: document.getElementById('product-purchase-price').value,
                 supplierId: document.getElementById('product-supplier').value
@@ -1014,8 +983,13 @@ const ProductModule = {
 
         // Confirm delete
         confirmDelete(productId) {
-            const product = ProductModule.data.currentProducts.find(p => p.id === productId);
-            if (!product) return;
+            console.log('🗑️ Confirming delete for product ID:', productId);
+            const product = ProductModule.data.currentProducts.find(p => String(p.id) === String(productId));
+            
+            if (!product) {
+                console.error('❌ Product not found for ID:', productId);
+                return;
+            }
 
             ProductModule.data.productToDelete = product;
 
@@ -1026,30 +1000,43 @@ const ProductModule = {
             if (nameElement) nameElement.textContent = product.name;
             if (detailsElement) {
                 const supplierName = ProductModule.ui.getSupplierName(product.supplierId);
-                detailsElement.textContent = `${product.code || 'Không có mã'} • ${product.unit || 'Không có đơn vị'} • ${supplierName}`;
+                detailsElement.textContent = `ID: #${product.id} • ${product.unit || 'Không có đơn vị'} • ${supplierName}`;
             }
 
-            // Show delete modal
-            const deleteModal = new bootstrap.Modal(document.getElementById('deleteProductModal'));
-            deleteModal.show();
+            // Show delete modal safely
+            const modalEl = document.getElementById('deleteProductModal');
+            if (modalEl) {
+                const deleteModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                deleteModal.show();
+            }
         },
 
         // Delete product
         async delete() {
             const product = ProductModule.data.productToDelete;
-            if (!product) return;
+            console.log('🔥 Executing delete for product:', product ? product.name : 'NULL');
+            
+            if (!product) {
+                console.error('❌ No product selected for deletion');
+                return;
+            }
 
             try {
                 const success = await ProductModule.database.delete(product.id);
                 if (success) {
-                    // Close modal
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('deleteProductModal'));
-                    if (modal) {
-                        modal.hide();
+                    console.log('✅ Database delete successful');
+                    
+                    // Close modal safely
+                    const modalEl = document.getElementById('deleteProductModal');
+                    if (modalEl) {
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
                     }
 
+                    // Force clean up any remaining backdrop
+                    ProductModule.utils.cleanupAllModals();
+
                     // Reload and refresh
-                    await ProductModule.database.loadAll();
                     await ProductModule.refresh();
                     ProductModule.ui.showSuccess('Xóa sản phẩm thành công!');
                 }

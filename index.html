@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta name="description" content="Ứng dụng quản lý bán hàng gốm sứ">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="description" content="Ứng dụng quản lý bán hàng gốm sứ">
         <meta name="theme-color" content="#6c5ce7">
     <title>Quản Lý Bán Hàng - Gốm Sứ</title>
 
@@ -25,6 +28,8 @@
     <!-- iOS support -->
     <link rel="apple-touch-icon" href="icons/ceramics-logo.jpg">
     <link rel="icon" type="image/jpeg" href="icons/ceramics-logo.jpg">
+    <!-- Library to save HTML as image -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -103,6 +108,9 @@
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders-tab-pane" type="button" role="tab" aria-controls="orders-tab-pane" aria-selected="false">Đơn hàng</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="employees-tab" data-bs-toggle="tab" data-bs-target="#employees-tab-pane" type="button" role="tab" aria-controls="employees-tab-pane" aria-selected="false">Nhân viên</button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="trips-tab" data-bs-toggle="tab" data-bs-target="#trips-tab-pane" type="button" role="tab" aria-controls="trips-tab-pane" aria-selected="false">Chuyến hàng</button>
@@ -470,6 +478,95 @@
                 </div>
             </div>
 
+            <!-- Tab Nhân viên -->
+            <div class="tab-pane fade" id="employees-tab-pane" role="tabpanel" aria-labelledby="employees-tab" tabindex="0">
+                <div class="container-fluid">
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+                                <div class="d-flex align-items-center gap-2">
+                                    <h4 class="mb-0 text-primary">
+                                        <i class="bi bi-person-vcard"></i> Quản lý nhân viên
+                                    </h4>
+                                    <span class="badge bg-secondary" id="employees-count">0</span>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-primary btn-lg" onclick="EmployeeModule.events.showAddModal()">
+                                        <i class="bi bi-plus-circle me-2"></i>Thêm nhân viên
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <ul class="nav nav-tabs border-0 bg-light p-1 rounded-3 mb-4" id="employee-sub-tabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active border-0 rounded-2" id="employee-list-tab" data-bs-toggle="tab" data-bs-target="#employee-list-view" type="button" role="tab">
+                                        <i class="bi bi-people me-2"></i>Danh sách nhân viên
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link border-0 rounded-2" id="employee-payroll-tab" data-bs-toggle="tab" data-bs-target="#employee-payroll-view" type="button" role="tab" onclick="EmployeeModule.events.loadPayroll()">
+                                        <i class="bi bi-cash-coin me-2"></i>Bảng lương & Ngày công
+                                    </button>
+                                </li>
+                            </ul>
+
+                            <div class="tab-content" id="employeeSubTabContent">
+                                <!-- View: Danh sách nhân viên -->
+                                <div class="tab-pane fade show active" id="employee-list-view" role="tabpanel">
+                                    <div class="row mb-4">
+                                        <div class="col-12 col-md-6 col-lg-4">
+                                            <div class="input-group">
+                                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                                                <input type="text" class="form-control border-start-0" id="employee-search" placeholder="Tìm tên nhân viên, SĐT...">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row" id="employee-list-container">
+                                        <!-- Employee cards will be injected here -->
+                                    </div>
+                                </div>
+
+                                <!-- View: Bảng lương -->
+                                <div class="tab-pane fade" id="employee-payroll-view" role="tabpanel">
+                                    <div class="card border-0 shadow-sm rounded-4">
+                                        <div class="card-body p-4">
+                                            <div class="row g-3 mb-4 align-items-end">
+                                                <div class="col-md-3">
+                                                    <label class="form-label small fw-bold">Chế độ xem</label>
+                                                    <select class="form-select" id="payroll-view-type" onchange="EmployeeModule.events.togglePayrollView()">
+                                                        <option value="month">Theo tháng</option>
+                                                        <option value="year">Theo năm</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-3" id="payroll-month-container">
+                                                    <label class="form-label small fw-bold">Chọn tháng/năm</label>
+                                                    <input type="month" class="form-control" id="payroll-month" onchange="EmployeeModule.events.loadPayroll()">
+                                                </div>
+                                                <div class="col-md-3 d-none" id="payroll-year-container">
+                                                    <label class="form-label small fw-bold">Chọn năm</label>
+                                                    <input type="number" class="form-control" id="payroll-year" onchange="EmployeeModule.events.loadPayroll()">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <button class="btn btn-outline-primary w-100" onclick="EmployeeModule.events.loadPayroll()">
+                                                        <i class="bi bi-arrow-clockwise"></i> Tải lại
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="table-responsive" id="payroll-container">
+                                                <!-- Payroll table will be injected here -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Tab Nhà cung cấp -->
             <div class="tab-pane fade show active" id="suppliers-tab-pane" role="tabpanel" aria-labelledby="suppliers-tab" tabindex="0">
                 <div class="container-fluid">
@@ -737,7 +834,7 @@
                                         <div class="card bg-light">
                                             <div class="card-body text-center">
                                                 <h6 class="card-title">Tổng công nợ</h6>
-                                                <p class="card-text fs-4 text-danger" id="total-debt-amount">0 VNĐ</p>
+                                                <p class="card-text fs-4 text-danger" id="total-debt-amount">0 K</p>
                                             </div>
                                         </div>
                                     </div>
@@ -813,6 +910,11 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Lọc báo cáo -->
+                    <div class="col-12" id="report-filter-container">
+                        <!-- Sẽ được populate bằng JavaScript -->
                     </div>
 
                     <!-- Báo cáo KQKD -->
@@ -1109,7 +1211,6 @@
                                             <li>Vào tab <strong>"Sản phẩm"</strong></li>
                                             <li>Điền thông tin:
                                                 <ul>
-                                                    <li><strong>Mã sản phẩm:</strong> Ví dụ "SP001" (tùy chọn)</li>
                                                     <li><strong>Tên sản phẩm:</strong> Ví dụ "Táo Envy"</li>
                                                     <li><strong>Đơn vị tính:</strong> Ví dụ "kg", "thùng", "cái"</li>
                                                     <li><strong>Giá nhập:</strong> Giá bạn mua từ nhà cung cấp</li>
@@ -1454,16 +1555,8 @@
                                 </div>
                             </div>
 
-                            <!-- Mã sản phẩm và Đơn vị -->
-                            <div class="col-md-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="product-code" placeholder="Mã sản phẩm">
-                                    <label for="product-code">
-                                        <i class="bi bi-upc me-2"></i>Mã sản phẩm
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
+                            <!-- Đơn vị -->
+                            <div class="col-md-12">
                                 <div class="form-floating">
                                     <input type="text" class="form-control" id="product-unit" placeholder="Đơn vị tính">
                                     <label for="product-unit">
@@ -1475,7 +1568,7 @@
                             <!-- Giá nhập và Nhà cung cấp -->
                             <div class="col-md-6">
                                 <div class="form-floating">
-                                    <input type="number" class="form-control" id="product-purchase-price" placeholder="Giá nhập" min="0">
+                                    <input type="number" class="form-control" id="product-purchase-price" placeholder="Giá nhập" min="0" step="any">
                                     <label for="product-purchase-price">
                                         <i class="bi bi-currency-dollar me-2"></i>Giá nhập
                                     </label>
@@ -1782,12 +1875,12 @@
                                                         </div>
                                                         <div class="col-4 mb-2">
                                                             <label class="form-label">Giá nhập</label>
-                                                            <input type="number" class="form-control product-purchase-price" min="0" readonly>
+                                                            <input type="number" class="form-control product-purchase-price" min="0" readonly step="any">
                                                             <small class="text-muted">Giá tham khảo</small>
                                                         </div>
                                                         <div class="col-4 mb-2">
                                                             <label class="form-label">Giá bán</label>
-                                                            <input type="number" class="form-control product-selling-price" min="0" required>
+                                                            <input type="number" class="form-control product-selling-price" min="0" required step="any">
                                                             <small class="text-muted">Giá bán cho khách</small>
                                                         </div>
                                                     </div>
@@ -1795,7 +1888,7 @@
                                                     <div class="row mt-2">
                                                         <div class="col-12">
                                                             <div class="bg-light p-2 rounded">
-                                                                <strong>Thành tiền: <span class="item-total">0 VNĐ</span></strong>
+                                                                <strong>Thành tiền: <span class="item-total">0 K</span></strong>
                                                                 <span class="profit-info ms-3 text-success"></span>
                                                             </div>
                                                         </div>
@@ -1816,11 +1909,11 @@
                                     <h6 class="fw-bold">Tổng đơn hàng:</h6>
                                     <div class="d-flex justify-content-between">
                                         <span>Tổng tiền:</span>
-                                        <span class="fw-bold" id="order-total">0 VNĐ</span>
+                                        <span class="fw-bold" id="order-total">0 K</span>
                                     </div>
                                     <div class="d-flex justify-content-between text-success">
                                         <span>Lợi nhuận dự kiến:</span>
-                                        <span class="fw-bold" id="order-profit">0 VNĐ</span>
+                                        <span class="fw-bold" id="order-profit">0 K</span>
                                     </div>
                                 </div>
                             </div>
@@ -1920,6 +2013,21 @@
                                 </div>
                             </div>
 
+                            <!-- Nhân viên tham gia -->
+                            <div class="col-md-12">
+                                <div class="card bg-light border-0">
+                                    <div class="card-body">
+                                        <h6 class="card-title fw-bold mb-3">
+                                            <i class="bi bi-people me-2"></i>Nhân viên tham gia
+                                        </h6>
+                                        <div id="trip-employee-selection" class="space-y-3">
+                                            <!-- Dynamically populated -->
+                                            <p class="text-muted small">Đang tải danh sách nhân viên...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Hidden field để lưu ID khi edit -->
                             <input type="hidden" id="edit-trip-id" />
                         </div>
@@ -1974,6 +2082,7 @@
     <script src="product.js"></script>
     <script src="order.js"></script>
     <script src="trip.js"></script>
+    <script src="employee.js"></script>
     <script src="tripExpense.js"></script>
     <script src="payment.js"></script>
     <script src="debt.js"></script>
@@ -2004,7 +2113,7 @@
                         </div>
                         <div class="mb-3">
                             <label for="legacy-debt-amount" class="form-label">Số tiền nợ *</label>
-                            <input type="number" class="form-control" id="legacy-debt-amount" min="1000" required placeholder="Nhập số tiền nợ">
+                            <input type="number" class="form-control" id="legacy-debt-amount" min="1000" required placeholder="Nhập số tiền nợ" step="any">
                         </div>
                         <div class="mb-3">
                             <label for="legacy-debt-date" class="form-label">Ngày phát sinh</label>
@@ -2020,6 +2129,68 @@
                         <button type="submit" class="btn btn-success">Lưu công nợ cũ</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+    <!-- Modal Thêm/Sửa Nhân viên -->
+    <div class="modal fade" id="employeeModal" tabindex="-1" aria-labelledby="employeeModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="employeeModalLabel">Thêm nhân viên</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="employee-form" onsubmit="EmployeeModule.events.handleFormSubmit(event)">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="employee-name" class="form-label">Tên nhân viên *</label>
+                            <input type="text" class="form-control" id="employee-name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="employee-role" class="form-label">Chức danh *</label>
+                            <select class="form-select" id="employee-role" required>
+                                <option value="">Chọn chức danh</option>
+                                <option value="lai_xe">Lái xe</option>
+                                <option value="phu_xe">Phụ xe</option>
+                                <option value="boc_hang">Bốc hàng</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="employee-contact" class="form-label">Số điện thoại</label>
+                            <input type="tel" class="form-control" id="employee-contact">
+                        </div>
+                        <div class="mb-3">
+                             <label for="employee-baseSalary" class="form-label">Lương/chuyến mặc định (K)</label>
+                            <input type="number" class="form-control" id="employee-baseSalary" min="0" value="0" step="any">
+                        </div>
+                        <input type="hidden" id="edit-employee-id">
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                        <button type="submit" class="btn btn-primary">Lưu nhân viên</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Xác nhận xóa nhân viên -->
+    <div class="modal fade" id="deleteEmployeeModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Xác nhận xóa</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center py-4">
+                    <i class="bi bi-exclamation-triangle text-danger" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3">Xóa nhân viên <span id="delete-employee-name" class="text-primary"></span>?</h5>
+                    <p class="text-muted small">Thao tác này không thể hoàn tác.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="button" class="btn btn-danger" onclick="EmployeeModule.events.confirmDelete()">Xóa</button>
+                </div>
             </div>
         </div>
     </div>

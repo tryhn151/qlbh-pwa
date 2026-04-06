@@ -412,7 +412,7 @@ class AutoBackupSystem {
 
         try {
             const metadata = this.getBackupMetadata();
-            const backupMeta = metadata.find(b => b.id === backupId);
+            const backupMeta = metadata.find(b => b.id == backupId);
             if (!backupMeta) {
                 throw new Error('Không tìm thấy backup');
             }
@@ -447,7 +447,7 @@ class AutoBackupSystem {
 
         try {
             const metadata = this.getBackupMetadata();
-            const backupMeta = metadata.find(b => b.id === backupId);
+            const backupMeta = metadata.find(b => b.id == backupId);
             if (!backupMeta) {
                 throw new Error('Không tìm thấy backup');
             }
@@ -456,7 +456,7 @@ class AutoBackupSystem {
             this.deleteBackupFile(backupId, backupMeta.type);
 
             // Cập nhật metadata
-            const newMetadata = metadata.filter(b => b.id !== backupId);
+            const newMetadata = metadata.filter(b => b.id != backupId);
             localStorage.setItem('backupMetadata', JSON.stringify(newMetadata));
 
             this.showNotification('Đã xóa backup', 'info');

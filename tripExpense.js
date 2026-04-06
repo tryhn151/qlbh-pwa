@@ -26,7 +26,7 @@ const TripExpenseModule = {
                 required: true,
                 min: 1,
                 max: 999999999,
-                message: 'Số tiền phải từ 1 đến 999,999,999 VNĐ'
+                message: 'Số tiền phải từ 1 đến 999,999,999 K'
             },
             category: {
                 required: true,
@@ -91,47 +91,9 @@ const TripExpenseModule = {
             return d.toLocaleDateString('vi-VN');
         },
 
-        // Wait for database
+        // Wait for database (Firestore shim - always ready after auth)
         async waitForDB() {
-            return new Promise((resolve) => {
-                if (window.db) {
-                    try {
-                        const tx = window.db.transaction('tripExpenses', 'readonly');
-                        tx.abort();
-                        resolve(window.db);
-                        return;
-                    } catch (error) {
-                        // Continue waiting
-                    }
-                }
-                
-                let attempts = 0;
-                const maxAttempts = 150;
-                
-                const checkInterval = setInterval(() => {
-                    attempts++;
-                    
-                    if (window.db) {
-                        try {
-                            const tx = window.db.transaction('tripExpenses', 'readonly');
-                            tx.abort();
-                            
-                            clearInterval(checkInterval);
-                            resolve(window.db);
-                        } catch (error) {
-                            // Continue waiting
-                        }
-                    } else if (attempts >= maxAttempts) {
-                        clearInterval(checkInterval);
-                        resolve(null);
-                    }
-                }, 100);
-                
-                setTimeout(() => {
-                    clearInterval(checkInterval);
-                    resolve(null);
-                }, 15000);
-            });
+            return window.db || null;
         },
 
         // Clean up modals
@@ -438,7 +400,7 @@ const TripExpenseModule = {
 
                 // Normalize data
                 const normalizedData = {
-                    tripId: expenseData.tripId,
+                    tripId: parseInt(expenseData.tripId),
                     description: expenseData.description.trim(),
                     amount: parseFloat(expenseData.amount),
                     category: expenseData.category || 'Chi phí khác',
@@ -514,7 +476,9 @@ const TripExpenseModule = {
         // Load expenses for a trip
         async loadForTrip(tripId) {
             try {
+                tripId = parseInt(tripId);
                 TripExpenseModule.data.currentTripId = tripId;
+
                 TripExpenseModule.data.currentExpenses = await TripExpenseModule.businessLogic.getTripExpenses(tripId);
                 TripExpenseModule.data.filteredExpenses = [...TripExpenseModule.data.currentExpenses];
                 
@@ -851,7 +815,10 @@ const TripExpenseModule = {
     actions: {
         // Add expense
         async add(tripId) {
-            if (!tripId || isNaN(tripId)) {
+            // Đảm bảo tripId là số
+            tripId = parseInt(tripId);
+
+            if (!tripId) {
                 TripExpenseModule.ui.showErrors(['Không xác định được chuyến hàng để thêm chi phí! Vui lòng thử lại.']);
                 return;
             }
@@ -885,12 +852,8 @@ const TripExpenseModule = {
                         if (descField) descField.focus();
                     }, 100);
                     
-                    // Chỉ cập nhật lại tab chi phí, không reload modal
+                    // Cập nhật lại tab chi phí, không reload modal
                     await TripExpenseModule.refresh();
-                    // Cập nhật lại tab chi phí trong modal nếu có
-                    if (typeof updateTripExpensesTab === 'function') {
-                        await updateTripExpensesTab(tripId);
-                    }
                 }
             } catch (error) {
                 TripExpenseModule.ui.showErrors([`Có lỗi xảy ra: ${error.message}`]);
@@ -911,7 +874,7 @@ const TripExpenseModule = {
         // Update expense
         async update() {
             const form = document.getElementById('add-expense-form');
-            const editId = parseInt(form.getAttribute('data-edit-id'));
+            const editId = form.getAttribute('data-edit-id');
             
             const formData = {
                 description: document.getElementById('expense-description').value.trim(),
@@ -951,7 +914,7 @@ const TripExpenseModule = {
 
         // Confirm delete (following supplier.js pattern)
         confirmDelete(expenseId) {
-            const expense = TripExpenseModule.data.currentExpenses.find(e => e.id === expenseId);
+            const expense = TripExpenseModule.data.currentExpenses.find(e => e.id == expenseId);
             if (!expense) return;
 
             TripExpenseModule.data.expenseToDelete = expense;
@@ -1078,7 +1041,7 @@ const TripExpenseModule = {
 
             try {
                 const editId = form.getAttribute('data-edit-id');
-                const tripId = parseInt(form.getAttribute('data-trip-id'));
+                const tripId = form.getAttribute('data-trip-id');
 
                 if (editId) {
                     await this.update();
@@ -1158,8 +1121,9 @@ const TripExpenseModule = {
         try {
             console.log(`🎯 Initializing TripExpenseModule for trip ${tripId}...`);
             
-            // Store current trip ID
-            this.data.currentTripId = tripId;
+            // Store current trip ID (đảm bảo là số)
+            this.data.currentTripId = parseInt(tripId);
+
             
             // Create expense category dropdown
             this.ui.createExpenseCategoryDropdown();
@@ -1216,59 +1180,8 @@ const TripExpenseModule = {
             const tripId = this.data.currentTripId;
             if (!tripId) return;
 
-            // Find the expense table in the current tab
-            const expenseTable = document.querySelector('#trip-expenses-pane .table tbody');
-            if (!expenseTable) return;
-
-            // Get current expenses
-            const expenses = await getTripExpenses(tripId);
-
-            // Update table content
-            let tableContent = '';
-            if (expenses.length > 0) {
-                expenses.forEach(expense => {
-                    tableContent += `
-                        <tr>
-                            <td><span class="badge bg-secondary">${expense.category || expense.type}</span></td>
-                            <td class="text-end"><strong class="text-danger">${formatCurrency(expense.amount)}</strong></td>
-                            <td><small class="text-muted">${expense.description || '<em>Không có mô tả</em>'}</small></td>
-                            <td class="text-center">
-                                <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-warning btn-sm edit-expense-btn"
-                                            data-expense-id="${expense.id}">
-                                        <i class="bi bi-pencil"></i> Sửa
-                                    </button>
-                                    <button class="btn btn-outline-danger btn-sm delete-expense-btn"
-                                            data-expense-id="${expense.id}">
-                                        <i class="bi bi-trash"></i> Xóa
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                });
-            } else {
-                tableContent = `
-                    <tr>
-                        <td colspan="4" class="text-center text-muted py-4">
-                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                            Chưa có chi phí phát sinh nào
-                        </td>
-                    </tr>
-                `;
-            }
-
-            expenseTable.innerHTML = tableContent;
-
-            // Re-setup event listeners for new buttons
-            TripExpenseModule.setupExpenseButtonListeners();
-
-            // Update total if exists
-            const totalElement = document.querySelector('#trip-expenses-pane .text-danger.fw-bold');
-            if (totalElement && expenses.length > 0) {
-                const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-                totalElement.textContent = formatCurrency(total);
-            }
+            // Delegate to the main updateTripExpensesTab function which has correct logic
+            await updateTripExpensesTab(tripId);
 
         } catch (error) {
             console.error('❌ Error updating expense list:', error);
@@ -1279,7 +1192,7 @@ const TripExpenseModule = {
     setupExpenseButtonListeners() {
         document.querySelectorAll('.edit-expense-btn').forEach(button => {
             button.addEventListener('click', async (e) => {
-                const expenseId = parseInt(e.currentTarget.getAttribute('data-expense-id'));
+                const expenseId = e.currentTarget.getAttribute('data-expense-id');
                 console.log('Edit expense ID:', expenseId);
                 await TripExpenseModule.actions.edit(expenseId);
             });
@@ -1287,7 +1200,7 @@ const TripExpenseModule = {
 
         document.querySelectorAll('.delete-expense-btn').forEach(button => {
             button.addEventListener('click', (e) => {
-                const expenseId = parseInt(e.currentTarget.getAttribute('data-expense-id'));
+                const expenseId = e.currentTarget.getAttribute('data-expense-id');
                 console.log('Delete expense ID:', expenseId);
                 TripExpenseModule.actions.confirmDelete(expenseId);
             });
@@ -1341,209 +1254,108 @@ async function calculateTripExpensesByCategory(tripId) {
     return await TripExpenseModule.businessLogic.calculateTripExpensesByCategory(tripId);
 }
 
-// Cập nhật tab chi phí phát sinh trong modal chi tiết chuyến hàng - MODERNIZED
+// Cập nhật danh sách chi phí trong modal chi tiết chuyến hàng
 async function updateTripExpensesTab(tripId) {
+    // Đảm bảo tripId là số
+    tripId = parseInt(tripId);
+
     try {
-        const expensesTabPane = document.getElementById('expenses-tab-pane');
-        if (!expensesTabPane) return;
-        
-        // Initialize TripExpenseModule for this trip
-        await TripExpenseModule.initForTrip(tripId);
-        
-        // Lấy tất cả chi phí phát sinh của chuyến hàng (preserved business logic)
+        // Tìm container danh sách chi phí (id được thêm vào trip.js)
+        const listContainer = document.getElementById('expense-list-container');
+        if (!listContainer) {
+            console.warn('⚠️ expense-list-container not found, skipping UI update');
+            return;
+        }
+
+        // Lấy tất cả chi phí phát sinh của chuyến hàng
         const expenses = await getTripExpenses(tripId);
-        
-        // Tính tổng chi phí phát sinh (preserved business logic)
+
+        // Tính tổng chi phí
         const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-        
-        // Tạo HTML cho tab chi phí phát sinh - MODERNIZED UI
+
+        // Render danh sách chi phí
+        let html = '';
         if (expenses.length > 0) {
-            let html = `
-                <div class="card border-0 shadow-sm">
-                    <div class="card-header bg-primary text-white">
-                        <h6 class="mb-0">
-                            <i class="bi bi-receipt me-2"></i>Danh sách chi phí phát sinh
-                            <span class="badge bg-light text-dark ms-2">${expenses.length} khoản</span>
-                        </h6>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th scope="col" class="text-center" style="width: 80px;">
-                                            <i class="bi bi-hash"></i>
-                                        </th>
-                                        <th scope="col">
-                                            <i class="bi bi-file-text me-2"></i>Mô tả
-                                        </th>
-                                        <th scope="col" style="width: 150px;">
-                                            <i class="bi bi-tag me-2"></i>Danh mục
-                                        </th>
-                                        <th scope="col" class="text-center" style="width: 120px;">
-                                            <i class="bi bi-calendar me-2"></i>Ngày
-                                        </th>
-                                        <th scope="col" class="text-end" style="width: 140px;">
-                                            <i class="bi bi-currency-dollar me-2"></i>Số tiền
-                                        </th>
-                                        <th scope="col" class="text-center" style="width: 120px;">
-                                            <i class="bi bi-gear me-2"></i>Thao tác
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
+            html = `
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle">
+                        <thead class="table-dark">
+                            <tr>
+                                <th scope="col" style="width: 120px;">Loại chi phí</th>
+                                <th scope="col" class="text-end" style="width: 130px;">Số tiền</th>
+                                <th scope="col">Mô tả</th>
+                                <th scope="col" class="text-center" style="width: 140px;">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
             `;
-            
-            for (const expense of expenses) {
+
+            expenses.forEach(expense => {
                 html += `
                     <tr>
-                        <td class="text-center fw-bold text-muted">${expense.id}</td>
-                        <td>
-                            <div class="fw-medium">${TripExpenseModule.utils.safeValue(expense.description)}</div>
-                        </td>
-                        <td>
-                            <span class="badge bg-info">${TripExpenseModule.utils.safeValue(expense.category, 'Chi phí khác')}</span>
-                        </td>
+                        <td><span class="badge bg-secondary">${expense.category || expense.type || 'Chi phí khác'}</span></td>
+                        <td class="text-end"><strong class="text-danger">${formatCurrency(expense.amount)}</strong></td>
+                        <td><small class="text-muted">${expense.description || '<em>Không có mô tả</em>'}</small></td>
                         <td class="text-center">
-                            <small class="text-muted">${TripExpenseModule.utils.formatDate(expense.date)}</small>
-                        </td>
-                        <td class="text-end">
-                            <strong class="text-danger">${TripExpenseModule.utils.formatCurrency(expense.amount)}</strong>
-                        </td>
-                        <td class="text-center">
-                            <div class="btn-group" role="group">
-                                <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
-                                        data-expense-id="${expense.id}" 
-                                        title="Chỉnh sửa">
-                                    <i class="bi bi-pencil"></i>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-warning btn-sm edit-expense-btn"
+                                        data-expense-id="${expense.id}">
+                                    <i class="bi bi-pencil"></i> Sửa
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger delete-expense-btn" 
-                                        data-expense-id="${expense.id}"
-                                        title="Xóa">
-                                    <i class="bi bi-trash"></i>
+                                <button class="btn btn-outline-danger btn-sm delete-expense-btn"
+                                        data-expense-id="${expense.id}">
+                                    <i class="bi bi-trash"></i> Xóa
                                 </button>
                             </div>
                         </td>
                     </tr>
                 `;
-            }
-            
+            });
+
             html += `
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div class="card-footer bg-light">
-                        <div class="row align-items-center">
-                            <div class="col-md-8">
-                                <div class="d-flex align-items-center">
-                                    <i class="bi bi-calculator text-primary me-2"></i>
-                                    <span class="text-muted">Tổng chi phí phát sinh:</span>
-                                </div>
-                            </div>
-                            <div class="col-md-4 text-end">
-                                <h5 class="mb-0 text-danger">${TripExpenseModule.utils.formatCurrency(totalExpenses)}</h5>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card border-0 shadow-sm mt-4">
-                    <div class="card-header bg-success text-white">
-                        <h6 class="mb-0">
-                            <i class="bi bi-pie-chart me-2"></i>Chi phí theo danh mục
-                        </h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-            `;
-            
-            // Tính chi phí theo danh mục (preserved business logic)
-            const expensesByCategory = await calculateTripExpensesByCategory(tripId);
-            
-            // Hiển thị chi phí theo danh mục - MODERNIZED UI
-            for (const category in expensesByCategory) {
-                if (expensesByCategory[category] > 0) {
-                    // Calculate percentage
-                    const percentage = totalExpenses > 0 ? ((expensesByCategory[category] / totalExpenses) * 100).toFixed(1) : 0;
-                    
-                    html += `
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card h-100 border-0 shadow-sm">
-                                <div class="card-body text-center">
-                                    <i class="bi bi-circle-fill text-warning mb-2" style="font-size: 1.5rem;"></i>
-                                    <h6 class="card-title">${category}</h6>
-                                    <p class="card-text text-danger mb-1">
-                                        <strong>${TripExpenseModule.utils.formatCurrency(expensesByCategory[category])}</strong>
-                                    </p>
-                                    <small class="text-muted">${percentage}% tổng chi phí</small>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-            }
-            
-            html += `
-                        </div>
-                    </div>
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th colspan="3" class="text-end">Tổng chi phí:</th>
+                                <th class="text-end text-danger fw-bold">${formatCurrency(totalExpenses)}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
             `;
-            
-            expensesTabPane.innerHTML = html;
-            
-            // Thêm sự kiện cho các nút - SỬA LẠI để lấy đúng ID
-            document.querySelectorAll('.edit-expense-btn').forEach(button => {
-                button.addEventListener('click', async (e) => {
-                    const expenseId = parseInt(e.currentTarget.getAttribute('data-expense-id'));
-                    console.log('Edit expense ID:', expenseId);
-                    await TripExpenseModule.actions.edit(expenseId);
-                });
-            });
-            
-            document.querySelectorAll('.delete-expense-btn').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const expenseId = parseInt(e.currentTarget.getAttribute('data-expense-id'));
-                    console.log('Delete expense ID:', expenseId);
-                    TripExpenseModule.actions.confirmDelete(expenseId);
-                });
-            });
         } else {
-            expensesTabPane.innerHTML = `
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body text-center py-5">
-                        <i class="bi bi-receipt text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
-                        <h5 class="text-muted mb-3">Chưa có chi phí phát sinh</h5>
-                        <p class="text-muted">Chưa có chi phí phát sinh nào được ghi nhận cho chuyến này.</p>
-                        <div class="mt-3">
-                            <button class="btn btn-primary" onclick="document.getElementById('add-expense-tab').click()">
-                                <i class="bi bi-plus-circle me-2"></i>Thêm chi phí đầu tiên
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
+            html = '<div class="alert alert-info">Chưa có chi phí nào cho chuyến hàng này.</div>';
         }
+
+        listContainer.innerHTML = html;
+
+        // Gắn lại event listeners cho các nút Sửa/Xóa vừa được render
+        listContainer.querySelectorAll('.edit-expense-btn').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const expenseId = parseInt(e.currentTarget.getAttribute('data-expense-id'));
+                console.log('Edit expense ID:', expenseId);
+                if (typeof TripExpenseModule !== 'undefined') {
+                    await TripExpenseModule.actions.edit(expenseId);
+                }
+            });
+        });
+
+        listContainer.querySelectorAll('.delete-expense-btn').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const expenseId = parseInt(e.currentTarget.getAttribute('data-expense-id'));
+                console.log('Delete expense ID:', expenseId);
+                if (typeof TripExpenseModule !== 'undefined') {
+                    TripExpenseModule.actions.confirmDelete(expenseId);
+                }
+            });
+        });
+
+        console.log(`✅ Updated expense list for trip ${tripId}: ${expenses.length} items, total: ${totalExpenses}`);
+
     } catch (error) {
         console.error('Lỗi khi cập nhật tab chi phí phát sinh:', error);
-        // Show error with modern UI
-        const expensesTabPane = document.getElementById('expenses-tab-pane');
-        if (expensesTabPane) {
-            expensesTabPane.innerHTML = `
-                <div class="alert alert-danger border-0 shadow-sm">
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-exclamation-triangle-fill me-3" style="font-size: 1.5rem;"></i>
-                        <div>
-                            <h6 class="mb-1">Lỗi khi tải chi phí phát sinh</h6>
-                            <small>Vui lòng thử lại sau hoặc liên hệ hỗ trợ</small>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
     }
 }
-
 // Chỉnh sửa chi phí phát sinh - MODERNIZED
 async function editTripExpense(expenseId) {
     // Use modern module action
@@ -1552,6 +1364,9 @@ async function editTripExpense(expenseId) {
 
 // Cập nhật thông tin tổng quan của chuyến hàng
 async function updateTripSummary(tripId) {
+    // Đảm bảo tripId là số
+    tripId = parseInt(tripId);
+
     try {
         // Lấy tổng chi phí nhập hàng
         const purchaseTx = db.transaction('purchases', 'readonly');
@@ -1582,25 +1397,22 @@ async function updateTripSummary(tripId) {
         // Tính lợi nhuận gộp
         const grossProfit = totalRevenue - totalCost;
         
-        // Cập nhật các card thông tin
-        const costCardElement = document.querySelector('.card-text.fs-4.text-danger');
-        if (costCardElement) {
-            costCardElement.textContent = formatCurrency(totalCost);
+        // Cập nhật card Chi phí VH bằng ID
+        const tripExpensesEl = document.getElementById('summary-trip-expenses');
+        if (tripExpensesEl) {
+            tripExpensesEl.textContent = formatCurrency(totalExpenses);
         }
-        
-        const revenueCardElement = document.querySelector('.card-text.fs-4.text-primary');
-        if (revenueCardElement) {
-            revenueCardElement.textContent = formatCurrency(totalRevenue);
-        }
-        
-        const grossProfitCardElement = document.querySelector('.card-text.fs-4:not(.text-danger):not(.text-primary)');
-        if (grossProfitCardElement) {
-            grossProfitCardElement.textContent = formatCurrency(grossProfit);
-            
-            // Cập nhật màu nền card lợi nhuận
-            const grossProfitCard = grossProfitCardElement.closest('.card');
-            if (grossProfitCard) {
-                grossProfitCard.className = grossProfit >= 0 ? 
+
+        // Cập nhật card LN Ròng bằng ID
+        // netProfit = grossProfit vì grossProfit đã tính: revenue - (purchaseCost + expenses)
+        const netProfitEl = document.getElementById('summary-net-profit');
+        if (netProfitEl) {
+            netProfitEl.textContent = formatCurrency(grossProfit);
+
+            // Cập nhật màu nền card LN Ròng
+            const netProfitCard = netProfitEl.closest('.card');
+            if (netProfitCard) {
+                netProfitCard.className = grossProfit >= 0 ?
                     'card bg-success text-white' : 'card bg-danger text-white';
             }
         }

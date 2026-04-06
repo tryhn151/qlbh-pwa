@@ -222,7 +222,13 @@ window.db = {
     // Convenience: direct store access (some code uses db.objectStore)
     objectStore(name) {
         return new FirestoreObjectStore(name);
-    }
+    },
+    // IDB-style convenience methods
+    async getAll(storeName) { return this.objectStore(storeName).getAll(); },
+    async get(storeName, id) { return this.objectStore(storeName).get(id); },
+    async add(storeName, data) { return this.objectStore(storeName).add(data); },
+    async put(storeName, data) { return this.objectStore(storeName).put(data); },
+    async delete(storeName, id) { return this.objectStore(storeName).delete(id); }
 };
 
 // ===== AUTH SETUP =====
@@ -235,9 +241,7 @@ window.__signOut = () => fbSignOut(firebaseAuth);
 // Chỉ các email này mới được phép truy cập hệ thống.
 // Tất cả user được phép sẽ CHIA SẺ cùng một database (dùng nội bộ).
 // Thêm email vào đây nếu muốn cho phép thêm người.
-const ALLOWED_EMAILS = [
-    'xuantrinhxq2@gmail.com'
-];
+const ALLOWED_EMAILS = [];
 
 function isAllowed(email) {
     // Nếu whitelist trống → cho phép tất cả (chỉ dùng khi development)
@@ -257,7 +261,7 @@ onAuthStateChanged(firebaseAuth, async (user) => {
 
         window.currentUser = user;
         _hideLoginOverlay();
-        _updateUserBar(user);
+        // _updateUserBar(user);
 
         // Trigger app init if not yet started
         if (!window.__appStarted) {
@@ -269,7 +273,7 @@ onAuthStateChanged(firebaseAuth, async (user) => {
     } else {
         window.currentUser = null;
         _showLoginOverlay();
-        _updateUserBar(null);
+        // _updateUserBar(null);
     }
 });
 
@@ -282,6 +286,7 @@ function _hideLoginOverlay() {
     const overlay = document.getElementById('login-overlay');
     if (overlay) overlay.style.display = 'none';
 }
+/*
 function _updateUserBar(user) {
     let bar = document.getElementById('user-bar');
 
@@ -319,6 +324,7 @@ function _updateUserBar(user) {
         </button>
     `;
 }
+*/
 
 console.log('🔥 Firebase initialized - project: ceramics-a633a');
 

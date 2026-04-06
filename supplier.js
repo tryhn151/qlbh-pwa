@@ -59,16 +59,9 @@ const SupplierModule = {
             return value;
         },
 
-        // Wait for database (Firestore - always ready after auth)
+        // Wait for database (Firestore shim - always ready after auth)
         async waitForDB() {
-            return window.DB ? true : null;
-        }, 100);
-                
-                setTimeout(() => {
-                    clearInterval(checkInterval);
-                    resolve(null);
-                }, 15000);
-            });
+            return window.db || null;
         },
 
 
@@ -163,7 +156,7 @@ const SupplierModule = {
             const trimmedName = name.trim().toLowerCase();
             return SupplierModule.data.currentSuppliers.some(supplier => 
                 supplier.name.toLowerCase() === trimmedName && 
-                supplier.id !== excludeId
+                supplier.id != excludeId
             );
         },
 
@@ -350,10 +343,10 @@ const SupplierModule = {
                     </td>
                     <td class="text-center">
                         <div class="btn-group" role="group">
-                            <button class="btn btn-sm btn-outline-primary" onclick="SupplierModule.actions.edit(${supplier.id})">
+                            <button class="btn btn-sm btn-outline-primary" onclick="SupplierModule.actions.edit('${supplier.id}')">
                                 <i class="bi bi-pencil"></i>
                             </button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="SupplierModule.actions.confirmDelete(${supplier.id})">
+                            <button class="btn btn-sm btn-outline-danger" onclick="SupplierModule.actions.confirmDelete('${supplier.id}')">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
@@ -407,10 +400,10 @@ const SupplierModule = {
                             </div>
                         </div>
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <button class="btn btn-outline-primary btn-sm" onclick="SupplierModule.actions.edit(${supplier.id})">
+                            <button class="btn btn-outline-primary btn-sm" onclick="SupplierModule.actions.edit('${supplier.id}')">
                                 <i class="bi bi-pencil me-1"></i>Sửa
                             </button>
-                            <button class="btn btn-outline-danger btn-sm" onclick="SupplierModule.actions.confirmDelete(${supplier.id})">
+                            <button class="btn btn-outline-danger btn-sm" onclick="SupplierModule.actions.confirmDelete('${supplier.id}')">
                                 <i class="bi bi-trash me-1"></i>Xóa
                             </button>
                         </div>
@@ -772,7 +765,7 @@ const SupplierModule = {
         // Update supplier
         async update() {
             const form = document.getElementById('supplier-form');
-            const editId = parseInt(form.getAttribute('data-edit-id'));
+            const editId = form.getAttribute('data-edit-id');
             
             const formData = {
                 name: document.getElementById('supplier-name').value.trim(),
@@ -818,61 +811,64 @@ const SupplierModule = {
 
         // Confirm delete
         confirmDelete(supplierId) {
-            try {
-                const supplier = SupplierModule.data.currentSuppliers.find(s => s.id === supplierId);
-                if (!supplier) return;
+            console.log('🗑️ Confirming delete for supplier ID:', supplierId);
+            const supplier = SupplierModule.data.currentSuppliers.find(s => String(s.id) === String(supplierId));
+            
+            if (!supplier) {
+                console.error('❌ Supplier not found for ID:', supplierId);
+                return;
+            }
 
-                SupplierModule.data.supplierToDelete = supplier;
+            SupplierModule.data.supplierToDelete = supplier;
 
-                // Update delete modal content
-                const nameElement = document.getElementById('delete-supplier-name');
-                const detailsElement = document.getElementById('delete-supplier-details');
+            // Update delete modal content
+            const nameElement = document.getElementById('delete-supplier-name');
+            const detailsElement = document.getElementById('delete-supplier-details');
 
-                if (nameElement) nameElement.textContent = supplier.name;
-                if (detailsElement) {
-                    detailsElement.textContent = `${supplier.region || 'Chưa có khu vực'} • ${supplier.contact || 'Chưa có liên hệ'}`;
-                }
+            if (nameElement) nameElement.textContent = supplier.name;
+            if (detailsElement) {
+                detailsElement.textContent = `${supplier.region || 'Chưa có khu vực'} • ${supplier.contact || 'Chưa có liên hệ'}`;
+            }
 
-                // Show delete modal safely
-                const modal = document.getElementById('deleteSupplierModal');
-                if (modal) {
-                    try {
-                        const bsModal = new bootstrap.Modal(modal);
-                        bsModal.show();
-                    } catch (error) {
-                        console.error('❌ Error showing delete supplier modal:', error);
-                        SupplierModule.ui.showErrors(['Có lỗi khi mở dialog xác nhận xóa. Vui lòng thử lại.']);
-                    }
-                } else {
-                    console.error('❌ Delete supplier modal element not found');
-                    SupplierModule.ui.showErrors(['Không tìm thấy dialog xác nhận xóa. Vui lòng tải lại trang.']);
-                }
-            } catch (error) {
-                console.error('❌ Error in confirm delete supplier:', error);
-                SupplierModule.ui.showErrors(['Có lỗi khi xác nhận xóa nhà cung cấp. Vui lòng thử lại.']);
+            // Show delete modal safely
+            const modalEl = document.getElementById('deleteSupplierModal');
+            if (modalEl) {
+                const deleteModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                deleteModal.show();
             }
         },
 
         // Delete supplier
         async delete() {
             const supplier = SupplierModule.data.supplierToDelete;
-            if (!supplier) return;
+            console.log('🔥 Executing delete for supplier:', supplier ? supplier.name : 'NULL');
+            
+            if (!supplier) {
+                console.error('❌ No supplier selected for deletion');
+                return;
+            }
 
             try {
                 const success = await SupplierModule.database.delete(supplier.id);
                 if (success) {
-                    // Close modal
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('deleteSupplierModal'));
-                    if (modal) {
-                        modal.hide();
+                    console.log('✅ Database delete successful');
+                    
+                    // Close modal safely
+                    const modalEl = document.getElementById('deleteSupplierModal');
+                    if (modalEl) {
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
                     }
 
+                    // Force clean up
+                    SupplierModule.utils.cleanupAllModals();
+
                     // Reload and refresh
-                    await SupplierModule.database.loadAll();
                     await SupplierModule.refresh();
                     SupplierModule.ui.showSuccess('Xóa nhà cung cấp thành công!');
                 }
             } catch (error) {
+                console.error('❌ Error executing delete:', error);
                 SupplierModule.ui.showErrors([`Có lỗi xảy ra khi xóa: ${error.message}`]);
             } finally {
                 SupplierModule.data.supplierToDelete = null;
